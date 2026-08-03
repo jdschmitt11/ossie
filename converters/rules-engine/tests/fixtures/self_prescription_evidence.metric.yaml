@@ -1,0 +1,113 @@
+version: '1.1'
+comment: |-
+  display_name: Prescription Evidence
+  description: Prescription-level dosing, approval, and scheduling parameters.
+source: gold_prescription_with_sk
+fields:
+  - name: sk_prescription
+    expr: source.sk_prescription
+    display_name: Prescription SK
+    tags: [rules_engine:anchor, node_type:prescription, evidence_version:1.0.0]
+  - name: _data_source
+    expr: source._data_source
+    display_name: Data Source
+  - name: site_name
+    expr: source.site_name
+    display_name: Site Name
+  - name: technique
+    expr: source.technique
+    display_name: Technique
+  - name: modality
+    expr: source.modality
+    display_name: Modality
+  - name: fractions
+    expr: TRY_CAST(source.fractions AS BIGINT)
+    display_name: Fractions
+  - name: fraction_dose
+    expr: source.fraction_dose
+    display_name: Fraction Dose
+  - name: total_dose
+    expr: TRY_CAST(source.total_dose AS DOUBLE)
+    display_name: Total Dose
+  - name: target_coverage
+    expr: source.target_coverage
+    display_name: Target Coverage
+  - name: coverage_dose_spec
+    expr: source.coverage_dose_spec
+    display_name: Coverage Dose Spec
+  - name: target_coverage_units
+    expr: source.target_coverage_units
+    display_name: Target Coverage Units
+  - name: status
+    expr: TRY_CAST(source.status AS BIGINT)
+    display_name: Status
+    comment: |
+      MOSAIQ Status_Enum (tinyint):
+      0=Unknown, 1=VOID, 2=CLOSE, 3=COMPLETE,
+      4=HOLD, 5=APPROVE, 6=PROCESS_LOCK, 7=PENDING
+  - name: status_label
+    expr: |
+      CASE TRY_CAST(source.status AS BIGINT)
+        WHEN 0 THEN 'Unknown'
+        WHEN 1 THEN 'VOID'
+        WHEN 2 THEN 'CLOSE'
+        WHEN 3 THEN 'COMPLETE'
+        WHEN 4 THEN 'HOLD'
+        WHEN 5 THEN 'APPROVE'
+        WHEN 6 THEN 'PROCESS_LOCK'
+        WHEN 7 THEN 'PENDING'
+        ELSE 'Unknown'
+      END
+    display_name: Status Label
+  - name: approval_dt_tm
+    expr: source.approval_dt_tm
+    display_name: Approval Dt Tm
+  - name: approval_staff_id
+    expr: source.approval_staff_id
+    display_name: Approval Staff Id
+  - name: staff_role
+    expr: source.staff_role
+    display_name: Staff Role
+    comment: |
+      MOSAIQ Staff_Role (smallint):
+      0=A MACHINE, 1=Physician, 2=Resident, 3=Therapist,
+      4=System Manager, 5=Physicist, 6=Service Engineer,
+      7=Dosimetrist, 8=Nurse, 9=Administrator,
+      10=Clerical, 11=Billing, 12=PPS
+  - name: staff_role_label
+    expr: |
+      CASE source.staff_role
+        WHEN 0 THEN 'A MACHINE'
+        WHEN 1 THEN 'Physician'
+        WHEN 2 THEN 'Resident'
+        WHEN 3 THEN 'Therapist'
+        WHEN 4 THEN 'System Manager'
+        WHEN 5 THEN 'Physicist'
+        WHEN 6 THEN 'Service Engineer'
+        WHEN 7 THEN 'Dosimetrist'
+        WHEN 8 THEN 'Nurse'
+        WHEN 9 THEN 'Administrator'
+        WHEN 10 THEN 'Clerical'
+        WHEN 11 THEN 'Billing'
+        WHEN 12 THEN 'PPS'
+        ELSE 'Unknown'
+      END
+    display_name: Staff Role Label
+  - name: physician_last_name
+    expr: source.physician_last_name
+    display_name: Physician Last Name
+  - name: physician_initials
+    expr: source.physician_initials
+    display_name: Physician Initials
+  - name: dose_ttl_cum
+    expr: TRY_CAST(source.dose_ttl_cum AS DOUBLE)
+    display_name: Dose Total Cumulative
+  - name: start_dt_tm
+    expr: source.start_dt_tm
+    display_name: Treatment Start Date
+  - name: last_dt_tm
+    expr: source.last_dt_tm
+    display_name: Last Treatment Date
+  - name: notes
+    expr: source.notes
+    display_name: Clinical Notes

@@ -1,0 +1,160 @@
+version: '1.1'
+rule_family_version: '1.1.0'
+evidence_id: 'self.prescription_evidence'
+evidence_version: '1.0.0'
+source: radonc.evidence.self_prescription_evidence
+use_cases: [patient]
+render_hint: presence
+comment: |-
+  Checks whether core prescription fields are present and usable.
+  Display name: Prescription Completeness
+dimensions:
+  - name: prescription_id
+    expr: source.sk_prescription
+    tags: [rules_engine:anchor, node_type:prescription, semantic_role:entity_key]
+  - name: fractions_present
+    expr: source.fractions > 0
+    display_name: Fractions present
+    comment: Passes when the prescription records a positive fraction count.
+    tags:
+      - semantic_role:rule_status
+      - rule_id:fractions_present
+      - rule_severity:MEDIUM
+      - rule_family_id:self_prescription
+      - rule_subject_columns:fractions
+      - rule_plain_english:The prescription fraction count must be greater than zero.
+      - rule_version:1.0.0
+  - name: total_dose_present
+    expr: source.total_dose > 0
+    display_name: Total dose present
+    comment: Passes when the prescription records a positive total dose.
+    tags:
+      - semantic_role:rule_status
+      - rule_id:total_dose_present
+      - rule_severity:HIGH
+      - rule_family_id:self_prescription
+      - rule_subject_columns:total_dose
+      - rule_plain_english:The prescription total dose must be greater than zero.
+      - rule_version:1.0.0
+  - name: status_present
+    expr: source.status IS NOT NULL AND source.status > 0
+    display_name: Status present
+    comment: |-
+      Passes when the prescription Status_Enum is a positive integer.
+      Status_Enum = 0 or NULL indicates an uninitialised / invalid record.
+      Checking > 0 is meaningful; checking non-empty string would trivially
+      pass for every non-null integer (any int cast to VARCHAR is non-empty).
+    tags:
+      - semantic_role:rule_status
+      - rule_id:status_present
+      - rule_severity:LOW
+      - rule_family_id:self_prescription
+      - rule_subject_columns:status,status_label
+      - rule_plain_english:The prescription Status_Enum must be a positive integer (not NULL or 0).
+      - rule_version:1.1.0
+  - name: site_name_present
+    expr: source.site_name IS NOT NULL AND TRIM(CAST(source.site_name AS STRING)) != ''
+    display_name: Site name present
+    comment: Passes when the prescription records a non-empty treatment site name.
+    tags:
+      - semantic_role:rule_status
+      - rule_id:site_name_present
+      - rule_severity:HIGH
+      - rule_family_id:self_prescription
+      - rule_subject_columns:site_name
+      - rule_plain_english:The prescription must have a treatment site name recorded.
+      - rule_version:1.0.0
+  - name: technique_present
+    expr: source.technique IS NOT NULL AND TRIM(CAST(source.technique AS STRING)) != ''
+    display_name: Technique present
+    comment: Passes when the prescription records a non-empty technique.
+    tags:
+      - semantic_role:rule_status
+      - rule_id:technique_present
+      - rule_severity:MEDIUM
+      - rule_family_id:self_prescription
+      - rule_subject_columns:technique
+      - rule_plain_english:The prescription must have a treatment technique recorded.
+      - rule_version:1.0.0
+  - name: modality_present
+    expr: source.modality IS NOT NULL AND TRIM(CAST(source.modality AS STRING)) != ''
+    display_name: Modality present
+    comment: Passes when the prescription records a non-empty modality.
+    tags:
+      - semantic_role:rule_status
+      - rule_id:modality_present
+      - rule_severity:MEDIUM
+      - rule_family_id:self_prescription
+      - rule_subject_columns:modality
+      - rule_plain_english:The prescription must have a treatment modality recorded.
+      - rule_version:1.0.0
+  - name: fraction_dose_present
+    expr: TRY_CAST(source.fraction_dose AS DOUBLE) > 0
+    display_name: Fraction dose present
+    comment: Passes when the prescription records a positive dose per fraction.
+    tags:
+      - semantic_role:rule_status
+      - rule_id:fraction_dose_present
+      - rule_severity:HIGH
+      - rule_family_id:self_prescription
+      - rule_subject_columns:fraction_dose
+      - rule_plain_english:The prescription dose per fraction must be greater than zero.
+      - rule_version:1.0.0
+  - name: target_coverage_present
+    expr: source.target_coverage IS NOT NULL AND TRIM(CAST(source.target_coverage AS STRING)) != ''
+    display_name: Target coverage present
+    comment: Passes when the prescription records a non-empty target coverage value.
+    tags:
+      - semantic_role:rule_status
+      - rule_id:target_coverage_present
+      - rule_severity:MEDIUM
+      - rule_family_id:self_prescription
+      - rule_subject_columns:target_coverage
+      - rule_plain_english:The prescription must have target coverage recorded.
+      - rule_version:1.0.0
+  - name: rx_depth_present
+    expr: source.coverage_dose_spec IS NOT NULL AND TRIM(CAST(source.coverage_dose_spec AS STRING)) != ''
+    display_name: Rx depth present
+    comment: |-
+      Passes when the prescription records a non-empty Rx_Depth (coverage_dose_spec).
+      Required for treatment planning depth calculations.
+    tags:
+      - semantic_role:rule_status
+      - rule_id:MS-007
+      - rule_severity:MEDIUM
+      - rule_family_id:self_prescription
+      - rule_subject_columns:coverage_dose_spec
+      - rule_audience_roles:physicist,dosimetrist
+      - rule_plain_english:The prescription must have a depth specification recorded.
+      - rule_version:1.0.0
+  - name: target_units_present
+    expr: source.target_coverage_units IS NOT NULL AND TRIM(CAST(source.target_coverage_units AS STRING)) != ''
+    display_name: Target units present
+    comment: |-
+      Passes when the prescription records non-empty Target_Units (target_coverage_units).
+      Required for dose calculation unit consistency.
+    tags:
+      - semantic_role:rule_status
+      - rule_id:MS-008
+      - rule_severity:MEDIUM
+      - rule_family_id:self_prescription
+      - rule_subject_columns:target_coverage_units
+      - rule_audience_roles:physicist,dosimetrist
+      - rule_plain_english:The prescription must have target coverage units recorded.
+      - rule_version:1.0.0
+  - name: rx_physician_signed
+    expr: source.status_label = 'APPROVE' AND source.staff_role_label = 'Physician' AND source.approval_dt_tm IS NOT NULL
+    display_name: Rx signed by physician
+    comment: |-
+      Passes when the prescription is in APPROVE status AND the approving
+      staff member has role Physician with a recorded approval timestamp.
+      A prescription in APPROVE status without physician sign-off is a workflow violation.
+    tags:
+      - semantic_role:rule_status
+      - rule_id:MS-009
+      - rule_severity:HIGH
+      - rule_family_id:self_prescription
+      - rule_subject_columns:status_label,staff_role_label,approval_dt_tm,physician_initials
+      - rule_audience_roles:doctor,physicist
+      - rule_plain_english:The prescription must be approved and signed by a physician.
+      - rule_version:1.1.0

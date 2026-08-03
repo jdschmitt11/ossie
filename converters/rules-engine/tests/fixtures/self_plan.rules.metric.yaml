@@ -1,0 +1,94 @@
+version: '1.1'
+rule_family_version: '1.0.0'
+evidence_id: 'self.plan_evidence'
+evidence_version: '1.2.0'
+source: radonc.evidence.self_plan_evidence
+use_cases: [patient]
+render_hint: presence
+comment: |-
+  Checks whether core plan fields are present and usable.
+  Display name: Plan Completeness
+dimensions:
+  - name: plan_id
+    expr: source.sk_plan
+    tags: [rules_engine:anchor, node_type:plan, semantic_role:entity_key]
+  - name: total_dose_present
+    expr: source.total_dose > 0
+    display_name: Total dose present
+    comment: Passes when the plan records a positive total dose.
+    tags:
+      - semantic_role:rule_status
+      - rule_id:total_dose_present
+      - rule_severity:HIGH
+      - rule_family_id:self_plan
+      - rule_subject_columns:total_dose
+      - rule_plain_english:The plan total dose must be greater than zero.
+  - name: fractions_present
+    expr: source.number_of_fractions > 0
+    display_name: Fractions present
+    comment: Passes when the plan records a positive fraction count.
+    tags:
+      - semantic_role:rule_status
+      - rule_id:fractions_present
+      - rule_severity:HIGH
+      - rule_family_id:self_plan
+      - rule_subject_columns:number_of_fractions
+      - rule_plain_english:The plan number of fractions must be greater than zero.
+  - name: coverage_percent_present
+    expr: TRY_CAST(source.coverage_percent AS DOUBLE) > 0
+    display_name: Coverage percent present
+    comment: Passes when the plan records a positive coverage percent.
+    tags:
+      - semantic_role:rule_status
+      - rule_id:coverage_percent_present
+      - rule_severity:HIGH
+      - rule_family_id:self_plan
+      - rule_subject_columns:coverage_percent
+      - rule_plain_english:The plan coverage percent must be greater than zero.
+  - name: plan_approved_present
+    expr: source.plan_approved = true
+    display_name: Plan approved
+    comment: Passes when the plan is flagged as approved.
+    tags:
+      - semantic_role:rule_status
+      - rule_id:plan_approved_present
+      - rule_severity:HIGH
+      - rule_family_id:self_plan
+      - rule_subject_columns:plan_approved,plan_approved_date_time,plan_approved_user
+      - rule_plain_english:The plan must be approved before treatment delivery.
+  - name: tx_site_present
+    expr: source.tx_site_classified IS NOT NULL AND TRIM(source.tx_site_classified) != ''
+    display_name: Treatment site present
+    comment: |-
+      Passes when a usable, rapidfuzz-classified treatment site is recorded.
+      Keyed on tx_site_classified so display markers ('MISSING'/'NOT DETECTED')
+      never count as present.
+    tags:
+      - semantic_role:rule_status
+      - rule_id:tx_site_present
+      - rule_severity:MEDIUM
+      - rule_family_id:self_plan
+      - rule_subject_columns:tx_site
+      - rule_plain_english:The plan must specify a treatment site.
+  - name: plan_intent_present
+    expr: source.plan_intent IS NOT NULL AND TRIM(source.plan_intent) != ''
+    display_name: Plan intent present
+    comment: Passes when a non-empty plan intent is recorded.
+    tags:
+      - semantic_role:rule_status
+      - rule_id:plan_intent_present
+      - rule_severity:MEDIUM
+      - rule_family_id:self_plan
+      - rule_subject_columns:plan_intent
+      - rule_plain_english:The plan must specify an intent (curative, palliative, etc.).
+  - name: treatment_orientation_present
+    expr: source.treatment_orientation IS NOT NULL AND TRIM(source.treatment_orientation) != ''
+    display_name: Treatment orientation present
+    comment: Passes when a non-empty treatment orientation is recorded.
+    tags:
+      - semantic_role:rule_status
+      - rule_id:treatment_orientation_present
+      - rule_severity:MEDIUM
+      - rule_family_id:self_plan
+      - rule_subject_columns:treatment_orientation
+      - rule_plain_english:The plan must specify a treatment orientation (HFS, HFP, FFS, FFP).

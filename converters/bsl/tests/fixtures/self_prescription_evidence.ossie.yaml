@@ -1,0 +1,185 @@
+version: 0.2.0.dev0
+semantic_model:
+- name: self_prescription_evidence
+  description: 'display_name: Prescription Evidence
+
+    description: Prescription-level dosing, approval, and scheduling parameters.'
+  datasets:
+  - name: self_prescription_evidence
+    source: gold_prescription_with_sk
+    primary_key:
+    - sk_prescription
+    fields:
+    - name: sk_prescription
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.sk_prescription
+      label: Prescription SK
+      custom_extensions:
+      - vendor_name: RULES_ENGINE
+        data: '{"_v": 1, "anchor": true, "node_type": "prescription", "evidence_version":
+          "1.0.0"}'
+    - name: _data_source
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source._data_source
+      label: Data Source
+    - name: site_name
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.site_name
+      label: Site Name
+    - name: technique
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.technique
+      label: Technique
+    - name: modality
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.modality
+      label: Modality
+    - name: fractions
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: TRY_CAST(source.fractions AS BIGINT)
+      label: Fractions
+    - name: fraction_dose
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.fraction_dose
+      label: Fraction Dose
+    - name: total_dose
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: TRY_CAST(source.total_dose AS DOUBLE)
+      label: Total Dose
+    - name: target_coverage
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.target_coverage
+      label: Target Coverage
+    - name: coverage_dose_spec
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.coverage_dose_spec
+      label: Coverage Dose Spec
+    - name: target_coverage_units
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.target_coverage_units
+      label: Target Coverage Units
+    - name: status
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: TRY_CAST(source.status AS BIGINT)
+      label: Status
+      description: 'MOSAIQ Status_Enum (tinyint):
+
+        0=Unknown, 1=VOID, 2=CLOSE, 3=COMPLETE,
+
+        4=HOLD, 5=APPROVE, 6=PROCESS_LOCK, 7=PENDING
+
+        '
+    - name: status_label
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: "CASE TRY_CAST(source.status AS BIGINT)\n  WHEN 0 THEN 'Unknown'\n\
+            \  WHEN 1 THEN 'VOID'\n  WHEN 2 THEN 'CLOSE'\n  WHEN 3 THEN 'COMPLETE'\n\
+            \  WHEN 4 THEN 'HOLD'\n  WHEN 5 THEN 'APPROVE'\n  WHEN 6 THEN 'PROCESS_LOCK'\n\
+            \  WHEN 7 THEN 'PENDING'\n  ELSE 'Unknown'\nEND\n"
+      label: Status Label
+    - name: approval_dt_tm
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.approval_dt_tm
+      label: Approval Dt Tm
+    - name: approval_staff_id
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.approval_staff_id
+      label: Approval Staff Id
+    - name: staff_role
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.staff_role
+      label: Staff Role
+      description: 'MOSAIQ Staff_Role (smallint):
+
+        0=A MACHINE, 1=Physician, 2=Resident, 3=Therapist,
+
+        4=System Manager, 5=Physicist, 6=Service Engineer,
+
+        7=Dosimetrist, 8=Nurse, 9=Administrator,
+
+        10=Clerical, 11=Billing, 12=PPS
+
+        '
+    - name: staff_role_label
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: "CASE source.staff_role\n  WHEN 0 THEN 'A MACHINE'\n  WHEN 1\
+            \ THEN 'Physician'\n  WHEN 2 THEN 'Resident'\n  WHEN 3 THEN 'Therapist'\n\
+            \  WHEN 4 THEN 'System Manager'\n  WHEN 5 THEN 'Physicist'\n  WHEN 6 THEN\
+            \ 'Service Engineer'\n  WHEN 7 THEN 'Dosimetrist'\n  WHEN 8 THEN 'Nurse'\n\
+            \  WHEN 9 THEN 'Administrator'\n  WHEN 10 THEN 'Clerical'\n  WHEN 11 THEN\
+            \ 'Billing'\n  WHEN 12 THEN 'PPS'\n  ELSE 'Unknown'\nEND\n"
+      label: Staff Role Label
+    - name: physician_last_name
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.physician_last_name
+      label: Physician Last Name
+    - name: physician_initials
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.physician_initials
+      label: Physician Initials
+    - name: dose_ttl_cum
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: TRY_CAST(source.dose_ttl_cum AS DOUBLE)
+      label: Dose Total Cumulative
+    - name: start_dt_tm
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.start_dt_tm
+      label: Treatment Start Date
+    - name: last_dt_tm
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.last_dt_tm
+      label: Last Treatment Date
+    - name: notes
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.notes
+      label: Clinical Notes
+  custom_extensions:
+  - vendor_name: RULES_ENGINE
+    data: '{"_v": 1, "artifact_kind": "evidence", "source_format": "rules_engine_metric_yaml",
+      "source_format_version": "1.1", "evidence_id": "self.prescription_evidence",
+      "evidence_version": "1.0.0", "anchor_node_type": "prescription"}'

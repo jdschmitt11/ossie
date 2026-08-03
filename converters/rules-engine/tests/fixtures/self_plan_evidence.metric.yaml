@@ -1,0 +1,94 @@
+version: '1.1'
+comment: |-
+  display_name: Plan Evidence
+  description: Plan-level completeness, presence, regimen, and governed ML review fields. Anchored at plan.
+source: gold_plan_with_sk
+fields:
+  - name: sk_plan
+    expr: source.sk_plan
+    display_name: Plan SK
+    tags: [rules_engine:anchor, node_type:plan, evidence_version:1.2.0]
+  - name: _data_source
+    expr: source._data_source
+    display_name: Data Source
+  - name: plan_name
+    expr: source.plan_name
+    display_name: Plan Name
+  - name: plan_status
+    expr: source.plan_status
+    display_name: Plan Status
+  - name: plan_approved
+    expr: source.plan_approved
+    display_name: Plan Approved
+  - name: plan_approved_date_time
+    expr: source.plan_approved_date_time
+    display_name: Plan Approved Date Time
+  - name: plan_approved_user
+    expr: source.plan_approved_user
+    display_name: Plan Approved User
+  - name: plan_intent
+    expr: source.plan_intent
+    display_name: Plan Intent
+  - name: prescribed_dose
+    expr: TRY_CAST(source.prescribed_dose AS DOUBLE)
+    display_name: Prescribed Dose
+  - name: prescribed_percentage
+    expr: source.prescribed_percentage
+    display_name: Prescribed Percentage
+  - name: number_of_fractions
+    expr: TRY_CAST(source.number_of_fractions AS BIGINT)
+    display_name: Number of Fractions
+  - name: total_dose
+    expr: TRY_CAST(source.total_dose AS DOUBLE)
+    display_name: Total Dose
+  - name: total_dose_cgy
+    expr: TRY_CAST(source.total_dose AS DOUBLE)
+    display_name: Total Dose (cGy)
+    comment: Governed model-input alias for the source total dose, which is stored in cGy.
+  - name: dose_per_fraction_cgy
+    expr: |-
+      CASE
+        WHEN TRY_CAST(source.number_of_fractions AS BIGINT) > 0
+          AND TRY_CAST(source.total_dose AS DOUBLE) > 0
+        THEN TRY_CAST(source.total_dose AS DOUBLE)
+          / TRY_CAST(source.number_of_fractions AS BIGINT)
+        ELSE NULL
+      END
+    display_name: Dose Per Fraction (cGy)
+    comment: |-
+      Governed joint-regimen feature. NULL when total dose or fraction count is absent,
+      non-positive, or not castable; the scoring status records invalid model input.
+  - name: coverage_percent
+    expr: source.coverage_percent
+    display_name: Coverage Percent
+  - name: treatment_orientation
+    expr: source.treatment_orientation
+    display_name: Treatment Orientation
+  - name: tx_site
+    expr: |-
+      CASE
+        WHEN source.plan_name IS NULL OR TRIM(CAST(source.plan_name AS STRING)) = '' THEN 'MISSING'
+        WHEN source.tx_site IS NULL OR TRIM(CAST(source.tx_site AS STRING)) = '' THEN 'NOT DETECTED'
+        ELSE CAST(source.tx_site AS STRING)
+      END
+    display_name: Treatment Site
+    comment: |-
+      Human-facing site value. 'MISSING' when the plan records no site text at all,
+      'NOT DETECTED' when a site name exists but rapidfuzz classified nothing,
+      otherwise the classified body site. Presence is judged via tx_site_classified.
+  - name: tx_site_classified
+    expr: CAST(source.tx_site AS STRING)
+    display_name: Treatment Site (Classified)
+    comment: |-
+      The raw rapidfuzz classification (NULL when unclassified or absent). Drives the
+      tx_site_present rule so 'MISSING'/'NOT DETECTED' display markers never count as
+      a present site.
+  - name: laterality
+    expr: source.laterality
+    display_name: Laterality
+  - name: treatment_type
+    expr: source.treatment_type
+    display_name: Treatment Type
+  - name: is_replan
+    expr: source.is_replan
+    display_name: Is Replan

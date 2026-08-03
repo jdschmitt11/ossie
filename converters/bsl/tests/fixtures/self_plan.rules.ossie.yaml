@@ -1,0 +1,123 @@
+version: 0.2.0.dev0
+semantic_model:
+- name: self_plan
+  description: 'Checks whether core plan fields are present and usable.
+
+    Display name: Plan Completeness'
+  datasets:
+  - name: self_plan
+    source: radonc.evidence.self_plan_evidence
+    primary_key:
+    - plan_id
+    fields:
+    - name: plan_id
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.sk_plan
+      custom_extensions:
+      - vendor_name: RULES_ENGINE
+        data: '{"_v": 1, "anchor": true, "node_type": "plan", "semantic_role": "entity_key"}'
+    - name: total_dose_present
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.total_dose > 0
+      label: Total dose present
+      description: Passes when the plan records a positive total dose.
+      custom_extensions:
+      - vendor_name: RULES_ENGINE
+        data: '{"_v": 1, "semantic_role": "rule_status", "rule_id": "total_dose_present",
+          "rule_severity": "HIGH", "rule_family_id": "self_plan", "rule_subject_columns":
+          ["total_dose"], "rule_plain_english": "The plan total dose must be greater
+          than zero."}'
+    - name: fractions_present
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.number_of_fractions > 0
+      label: Fractions present
+      description: Passes when the plan records a positive fraction count.
+      custom_extensions:
+      - vendor_name: RULES_ENGINE
+        data: '{"_v": 1, "semantic_role": "rule_status", "rule_id": "fractions_present",
+          "rule_severity": "HIGH", "rule_family_id": "self_plan", "rule_subject_columns":
+          ["number_of_fractions"], "rule_plain_english": "The plan number of fractions
+          must be greater than zero."}'
+    - name: coverage_percent_present
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: TRY_CAST(source.coverage_percent AS DOUBLE) > 0
+      label: Coverage percent present
+      description: Passes when the plan records a positive coverage percent.
+      custom_extensions:
+      - vendor_name: RULES_ENGINE
+        data: '{"_v": 1, "semantic_role": "rule_status", "rule_id": "coverage_percent_present",
+          "rule_severity": "HIGH", "rule_family_id": "self_plan", "rule_subject_columns":
+          ["coverage_percent"], "rule_plain_english": "The plan coverage percent must
+          be greater than zero."}'
+    - name: plan_approved_present
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.plan_approved = true
+      label: Plan approved
+      description: Passes when the plan is flagged as approved.
+      custom_extensions:
+      - vendor_name: RULES_ENGINE
+        data: '{"_v": 1, "semantic_role": "rule_status", "rule_id": "plan_approved_present",
+          "rule_severity": "HIGH", "rule_family_id": "self_plan", "rule_subject_columns":
+          ["plan_approved", "plan_approved_date_time", "plan_approved_user"], "rule_plain_english":
+          "The plan must be approved before treatment delivery."}'
+    - name: tx_site_present
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.tx_site_classified IS NOT NULL AND TRIM(source.tx_site_classified)
+            != ''
+      label: Treatment site present
+      description: 'Passes when a usable, rapidfuzz-classified treatment site is recorded.
+
+        Keyed on tx_site_classified so display markers (''MISSING''/''NOT DETECTED'')
+
+        never count as present.'
+      custom_extensions:
+      - vendor_name: RULES_ENGINE
+        data: '{"_v": 1, "semantic_role": "rule_status", "rule_id": "tx_site_present",
+          "rule_severity": "MEDIUM", "rule_family_id": "self_plan", "rule_subject_columns":
+          ["tx_site"], "rule_plain_english": "The plan must specify a treatment site."}'
+    - name: plan_intent_present
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.plan_intent IS NOT NULL AND TRIM(source.plan_intent)
+            != ''
+      label: Plan intent present
+      description: Passes when a non-empty plan intent is recorded.
+      custom_extensions:
+      - vendor_name: RULES_ENGINE
+        data: '{"_v": 1, "semantic_role": "rule_status", "rule_id": "plan_intent_present",
+          "rule_severity": "MEDIUM", "rule_family_id": "self_plan", "rule_subject_columns":
+          ["plan_intent"], "rule_plain_english": "The plan must specify an intent
+          (curative, palliative, etc.)."}'
+    - name: treatment_orientation_present
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.treatment_orientation IS NOT NULL AND TRIM(source.treatment_orientation)
+            != ''
+      label: Treatment orientation present
+      description: Passes when a non-empty treatment orientation is recorded.
+      custom_extensions:
+      - vendor_name: RULES_ENGINE
+        data: '{"_v": 1, "semantic_role": "rule_status", "rule_id": "treatment_orientation_present",
+          "rule_severity": "MEDIUM", "rule_family_id": "self_plan", "rule_subject_columns":
+          ["treatment_orientation"], "rule_plain_english": "The plan must specify
+          a treatment orientation (HFS, HFP, FFS, FFP)."}'
+  custom_extensions:
+  - vendor_name: RULES_ENGINE
+    data: '{"_v": 1, "artifact_kind": "rules", "source_format": "rules_engine_metric_yaml",
+      "source_format_version": "1.1", "rule_family_id": "self_plan", "rule_family_version":
+      "1.0.0", "evidence_id": "self.plan_evidence", "evidence_version": "1.2.0", "use_cases":
+      ["patient"], "render_hint": "presence", "anchor_node_type": "plan"}'

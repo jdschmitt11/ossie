@@ -1,0 +1,173 @@
+version: 0.2.0.dev0
+semantic_model:
+- name: self_plan_evidence
+  description: 'display_name: Plan Evidence
+
+    description: Plan-level completeness, presence, regimen, and governed ML review
+    fields. Anchored at plan.'
+  datasets:
+  - name: self_plan_evidence
+    source: gold_plan_with_sk
+    primary_key:
+    - sk_plan
+    fields:
+    - name: sk_plan
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.sk_plan
+      label: Plan SK
+      custom_extensions:
+      - vendor_name: RULES_ENGINE
+        data: '{"_v": 1, "anchor": true, "node_type": "plan", "evidence_version":
+          "1.2.0"}'
+    - name: _data_source
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source._data_source
+      label: Data Source
+    - name: plan_name
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.plan_name
+      label: Plan Name
+    - name: plan_status
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.plan_status
+      label: Plan Status
+    - name: plan_approved
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.plan_approved
+      label: Plan Approved
+    - name: plan_approved_date_time
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.plan_approved_date_time
+      label: Plan Approved Date Time
+    - name: plan_approved_user
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.plan_approved_user
+      label: Plan Approved User
+    - name: plan_intent
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.plan_intent
+      label: Plan Intent
+    - name: prescribed_dose
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: TRY_CAST(source.prescribed_dose AS DOUBLE)
+      label: Prescribed Dose
+    - name: prescribed_percentage
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.prescribed_percentage
+      label: Prescribed Percentage
+    - name: number_of_fractions
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: TRY_CAST(source.number_of_fractions AS BIGINT)
+      label: Number of Fractions
+    - name: total_dose
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: TRY_CAST(source.total_dose AS DOUBLE)
+      label: Total Dose
+    - name: total_dose_cgy
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: TRY_CAST(source.total_dose AS DOUBLE)
+      label: Total Dose (cGy)
+      description: Governed model-input alias for the source total dose, which is
+        stored in cGy.
+    - name: dose_per_fraction_cgy
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: "CASE\n  WHEN TRY_CAST(source.number_of_fractions AS BIGINT)\
+            \ > 0\n    AND TRY_CAST(source.total_dose AS DOUBLE) > 0\n  THEN TRY_CAST(source.total_dose\
+            \ AS DOUBLE)\n    / TRY_CAST(source.number_of_fractions AS BIGINT)\n \
+            \ ELSE NULL\nEND"
+      label: Dose Per Fraction (cGy)
+      description: 'Governed joint-regimen feature. NULL when total dose or fraction
+        count is absent,
+
+        non-positive, or not castable; the scoring status records invalid model input.'
+    - name: coverage_percent
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.coverage_percent
+      label: Coverage Percent
+    - name: treatment_orientation
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.treatment_orientation
+      label: Treatment Orientation
+    - name: tx_site
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: "CASE\n  WHEN source.plan_name IS NULL OR TRIM(CAST(source.plan_name\
+            \ AS STRING)) = '' THEN 'MISSING'\n  WHEN source.tx_site IS NULL OR TRIM(CAST(source.tx_site\
+            \ AS STRING)) = '' THEN 'NOT DETECTED'\n  ELSE CAST(source.tx_site AS\
+            \ STRING)\nEND"
+      label: Treatment Site
+      description: 'Human-facing site value. ''MISSING'' when the plan records no
+        site text at all,
+
+        ''NOT DETECTED'' when a site name exists but rapidfuzz classified nothing,
+
+        otherwise the classified body site. Presence is judged via tx_site_classified.'
+    - name: tx_site_classified
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: CAST(source.tx_site AS STRING)
+      label: Treatment Site (Classified)
+      description: 'The raw rapidfuzz classification (NULL when unclassified or absent).
+        Drives the
+
+        tx_site_present rule so ''MISSING''/''NOT DETECTED'' display markers never
+        count as
+
+        a present site.'
+    - name: laterality
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.laterality
+      label: Laterality
+    - name: treatment_type
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.treatment_type
+      label: Treatment Type
+    - name: is_replan
+      expression:
+        dialects:
+        - dialect: DATABRICKS
+          expression: source.is_replan
+      label: Is Replan
+  custom_extensions:
+  - vendor_name: RULES_ENGINE
+    data: '{"_v": 1, "artifact_kind": "evidence", "source_format": "rules_engine_metric_yaml",
+      "source_format_version": "1.1", "evidence_id": "self.plan_evidence", "evidence_version":
+      "1.2.0", "anchor_node_type": "plan"}'

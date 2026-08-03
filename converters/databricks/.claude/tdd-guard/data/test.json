@@ -1,0 +1,394 @@
+{
+  "testModules": [
+    {
+      "moduleId": "tests/test_metric_view_to_ossie.py",
+      "tests": [
+        {
+          "name": "test_fixtureB_import_matches_expected",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_fixtureB_import_matches_expected",
+          "state": "passed"
+        },
+        {
+          "name": "test_fields_is_accepted_as_alias_for_dimensions",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_fields_is_accepted_as_alias_for_dimensions",
+          "state": "passed"
+        },
+        {
+          "name": "test_unsupported_version_rejected",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_unsupported_version_rejected",
+          "state": "passed"
+        },
+        {
+          "name": "test_both_dimensions_and_fields_present_warns_and_uses_dimensions",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_both_dimensions_and_fields_present_warns_and_uses_dimensions",
+          "state": "passed"
+        },
+        {
+          "name": "test_stash_written_at_each_level",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_stash_written_at_each_level",
+          "state": "passed"
+        },
+        {
+          "name": "test_name_override",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_name_override",
+          "state": "passed"
+        },
+        {
+          "name": "test_cross_join_rejected",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_cross_join_rejected",
+          "state": "passed"
+        },
+        {
+          "name": "test_duplicate_join_name_rejected",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_duplicate_join_name_rejected",
+          "state": "passed"
+        },
+        {
+          "name": "test_complex_joined_dimension_filed_under_join_dataset",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_complex_joined_dimension_filed_under_join_dataset",
+          "state": "passed"
+        },
+        {
+          "name": "test_non_equi_on_rejected",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_non_equi_on_rejected",
+          "state": "passed"
+        },
+        {
+          "name": "test_complex_equi_on_rejected",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_complex_equi_on_rejected",
+          "state": "passed"
+        },
+        {
+          "name": "test_one_to_many_join_flips_from_to_and_stashes_source",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_one_to_many_join_flips_from_to_and_stashes_source",
+          "state": "passed"
+        },
+        {
+          "name": "test_at_most_one_match_recovers_unique_key",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_at_most_one_match_recovers_unique_key",
+          "state": "passed"
+        },
+        {
+          "name": "test_join_named_source_rejected",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_join_named_source_rejected",
+          "state": "passed"
+        },
+        {
+          "name": "test_sql_source_name_defaults_to_metric_view",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_sql_source_name_defaults_to_metric_view",
+          "state": "passed"
+        },
+        {
+          "name": "test_join_missing_source_raises",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_join_missing_source_raises",
+          "state": "passed"
+        },
+        {
+          "name": "test_measure_rewrite_with_regex_special_name",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_measure_rewrite_with_regex_special_name",
+          "state": "passed"
+        },
+        {
+          "name": "test_invalid_source_rejected",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_invalid_source_rejected",
+          "state": "passed"
+        },
+        {
+          "name": "test_malformed_yaml_raises_conversion_error",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_malformed_yaml_raises_conversion_error",
+          "state": "passed"
+        },
+        {
+          "name": "test_empty_using_rejected",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_empty_using_rejected",
+          "state": "passed"
+        },
+        {
+          "name": "test_boollike_string_values_stay_strings_for_a_yaml_1_1_reader",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_boollike_string_values_stay_strings_for_a_yaml_1_1_reader",
+          "state": "passed"
+        },
+        {
+          "name": "test_fact_qualifier_variants_in_on_decompose",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_fact_qualifier_variants_in_on_decompose",
+          "state": "passed"
+        },
+        {
+          "name": "test_multi_column_on_with_bare_and_tablename_fact",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_multi_column_on_with_bare_and_tablename_fact",
+          "state": "passed"
+        },
+        {
+          "name": "test_join_named_source_rejected_any_case",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_join_named_source_rejected_any_case",
+          "state": "passed"
+        },
+        {
+          "name": "test_empty_source_part_rejected",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_empty_source_part_rejected",
+          "state": "passed"
+        },
+        {
+          "name": "test_whitespace_source_part_rejected",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_whitespace_source_part_rejected",
+          "state": "passed"
+        },
+        {
+          "name": "test_with_paren_subquery_source_accepted",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_with_paren_subquery_source_accepted",
+          "state": "passed"
+        },
+        {
+          "name": "test_nested_join_bare_column_rejected",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_nested_join_bare_column_rejected",
+          "state": "passed"
+        },
+        {
+          "name": "test_case_variant_duplicate_name_rejected",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_case_variant_duplicate_name_rejected",
+          "state": "passed"
+        },
+        {
+          "name": "test_falsy_dimension_name_is_not_a_wildcard",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_falsy_dimension_name_is_not_a_wildcard",
+          "state": "passed"
+        },
+        {
+          "name": "test_non_string_scalars_raise_clean_error",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_non_string_scalars_raise_clean_error",
+          "state": "passed"
+        },
+        {
+          "name": "test_using_join_emits_no_yaml_anchor",
+          "fullName": "tests/test_metric_view_to_ossie.py::test_using_join_emits_no_yaml_anchor",
+          "state": "passed"
+        }
+      ]
+    },
+    {
+      "moduleId": "tests/test_ossie_to_metric_view.py",
+      "tests": [
+        {
+          "name": "test_fixtureA_export_matches_expected",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_fixtureA_export_matches_expected",
+          "state": "passed"
+        },
+        {
+          "name": "test_tpcds_export_matches_expected",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_tpcds_export_matches_expected",
+          "state": "passed"
+        },
+        {
+          "name": "test_unsupported_version_rejected",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_unsupported_version_rejected",
+          "state": "passed"
+        },
+        {
+          "name": "test_multiple_roots_raises",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_multiple_roots_raises",
+          "state": "passed"
+        },
+        {
+          "name": "test_triangle_is_rejected_as_cycle",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_triangle_is_rejected_as_cycle",
+          "state": "passed"
+        },
+        {
+          "name": "test_mto_diamond_fans_out",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_mto_diamond_fans_out",
+          "state": "passed"
+        },
+        {
+          "name": "test_otm_diamond_fans_out",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_otm_diamond_fans_out",
+          "state": "passed"
+        },
+        {
+          "name": "test_cycle_raises",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_cycle_raises",
+          "state": "passed"
+        },
+        {
+          "name": "test_no_unknown_keys_leak",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_no_unknown_keys_leak",
+          "state": "passed"
+        },
+        {
+          "name": "test_primary_key_is_dropped",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_primary_key_is_dropped",
+          "state": "passed"
+        },
+        {
+          "name": "test_measure_strips_fact_prefix",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_measure_strips_fact_prefix",
+          "state": "passed"
+        },
+        {
+          "name": "test_measure_keeps_lookalike_table_prefix",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_measure_keeps_lookalike_table_prefix",
+          "state": "passed"
+        },
+        {
+          "name": "test_invalid_source_rejected",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_invalid_source_rejected",
+          "state": "passed"
+        },
+        {
+          "name": "test_duplicate_dimension_name_rejected",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_duplicate_dimension_name_rejected",
+          "state": "passed"
+        },
+        {
+          "name": "test_measure_name_collides_with_dimension_rejected",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_measure_name_collides_with_dimension_rejected",
+          "state": "passed"
+        },
+        {
+          "name": "test_cascade_drop_downstream_measure_reference",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_cascade_drop_downstream_measure_reference",
+          "state": "passed"
+        },
+        {
+          "name": "test_cascade_drop_downstream_dimension_reference",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_cascade_drop_downstream_dimension_reference",
+          "state": "passed"
+        },
+        {
+          "name": "test_orientation_unverifiable_when_to_side_has_no_key_warns",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_orientation_unverifiable_when_to_side_has_no_key_warns",
+          "state": "passed"
+        },
+        {
+          "name": "test_cascade_drop_skips_qualified_join_alias_collision",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_cascade_drop_skips_qualified_join_alias_collision",
+          "state": "passed"
+        },
+        {
+          "name": "test_source_on_to_side_derives_one_to_many",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_source_on_to_side_derives_one_to_many",
+          "state": "passed"
+        },
+        {
+          "name": "test_default_fact_is_fk_sink_and_many_to_one",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_default_fact_is_fk_sink_and_many_to_one",
+          "state": "passed"
+        },
+        {
+          "name": "test_unknown_source_rejected",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_unknown_source_rejected",
+          "state": "passed"
+        },
+        {
+          "name": "test_one_to_many_subtree_must_stay_one_to_many",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_one_to_many_subtree_must_stay_one_to_many",
+          "state": "passed"
+        },
+        {
+          "name": "test_primary_key_deduces_at_most_one_match",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_primary_key_deduces_at_most_one_match",
+          "state": "passed"
+        },
+        {
+          "name": "test_mislabeled_from_to_reoriented_by_key",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_mislabeled_from_to_reoriented_by_key",
+          "state": "passed"
+        },
+        {
+          "name": "test_dataset_named_source_is_renamed",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_dataset_named_source_is_renamed",
+          "state": "passed"
+        },
+        {
+          "name": "test_fanout_alias_collision_deduped",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_fanout_alias_collision_deduped",
+          "state": "passed"
+        },
+        {
+          "name": "test_malformed_input_raises_conversion_error",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_malformed_input_raises_conversion_error",
+          "state": "passed"
+        },
+        {
+          "name": "test_nameless_relationship_with_ai_context_does_not_crash",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_nameless_relationship_with_ai_context_does_not_crash",
+          "state": "passed"
+        },
+        {
+          "name": "test_fanout_complex_expr_dropped_not_emitted_ambiguously",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_fanout_complex_expr_dropped_not_emitted_ambiguously",
+          "state": "passed"
+        },
+        {
+          "name": "test_malformed_yaml_raises_conversion_error",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_malformed_yaml_raises_conversion_error",
+          "state": "passed"
+        },
+        {
+          "name": "test_nested_join_uses_full_path_qualification",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_nested_join_uses_full_path_qualification",
+          "state": "passed"
+        },
+        {
+          "name": "test_case_variant_dataset_name_rejected",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_case_variant_dataset_name_rejected",
+          "state": "passed"
+        },
+        {
+          "name": "test_non_string_field_expression_raises_clean_error",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_non_string_field_expression_raises_clean_error",
+          "state": "passed"
+        },
+        {
+          "name": "test_scalar_join_columns_rejected",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_scalar_join_columns_rejected",
+          "state": "passed"
+        },
+        {
+          "name": "test_malformed_stash_json_raises_conversion_error",
+          "fullName": "tests/test_ossie_to_metric_view.py::test_malformed_stash_json_raises_conversion_error",
+          "state": "passed"
+        }
+      ]
+    },
+    {
+      "moduleId": "tests/test_roundtrip.py",
+      "tests": [
+        {
+          "name": "test_ossie_to_mv_to_ossie",
+          "fullName": "tests/test_roundtrip.py::test_ossie_to_mv_to_ossie",
+          "state": "passed"
+        },
+        {
+          "name": "test_using_clause_round_trips",
+          "fullName": "tests/test_roundtrip.py::test_using_clause_round_trips",
+          "state": "passed"
+        },
+        {
+          "name": "test_mv_to_ossie_to_mv_is_lossless",
+          "fullName": "tests/test_roundtrip.py::test_mv_to_ossie_to_mv_is_lossless",
+          "state": "passed"
+        },
+        {
+          "name": "test_tpcds_mv_round_trips",
+          "fullName": "tests/test_roundtrip.py::test_tpcds_mv_round_trips",
+          "state": "passed"
+        },
+        {
+          "name": "test_one_to_many_round_trips_mv_ossie_mv",
+          "fullName": "tests/test_roundtrip.py::test_one_to_many_round_trips_mv_ossie_mv",
+          "state": "passed"
+        },
+        {
+          "name": "test_property_mv_to_ossie_to_mv_seeded",
+          "fullName": "tests/test_roundtrip.py::test_property_mv_to_ossie_to_mv_seeded",
+          "state": "passed"
+        },
+        {
+          "name": "test_property_ossie_to_mv_to_ossie_seeded",
+          "fullName": "tests/test_roundtrip.py::test_property_ossie_to_mv_to_ossie_seeded",
+          "state": "passed"
+        }
+      ]
+    }
+  ]
+}
