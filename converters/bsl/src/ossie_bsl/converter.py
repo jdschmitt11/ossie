@@ -518,6 +518,10 @@ _AGGREGATE_METHODS = {
     exp.Count: "count",
 }
 _CALCULATED_BINARY_OPERATORS = {
+    exp.Add: operator.add,
+    exp.Sub: operator.sub,
+    exp.Mul: operator.mul,
+    exp.Div: operator.truediv,
     exp.EQ: operator.eq,
     exp.NEQ: operator.ne,
     exp.LT: operator.lt,
