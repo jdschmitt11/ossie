@@ -47,27 +47,29 @@ def _require(payload: dict[str, Any], key: str) -> str:
     return value
 
 
-def with_node_identity(model: SemanticModel, *, scope_key: str | None) -> SemanticModel:
-    """Add node identities, rejecting conflicting literal and upstream scopes.
+def with_node_identity(model: SemanticModel, *, evaluation_key: str | None) -> SemanticModel:
+    """Add node identities, rejecting conflicting literal and upstream evaluation keys.
 
-    Pass ``scope_key=None`` to use an existing ``scope_key`` dimension. Otherwise
-    the non-empty literal is added as that dimension. Supplying both is invalid;
-    neither value silently takes precedence.
+    ``evaluation_key`` is deterministic evaluation identity (never a physical
+    partition column -- see rules_engine's ``EvaluationContext``/``PartitionRef``
+    split). Pass ``evaluation_key=None`` to use an existing ``evaluation_key``
+    dimension. Otherwise the non-empty literal is added as that dimension.
+    Supplying both is invalid; neither value silently takes precedence.
     """
-    source_scope = model.get_dimensions().get("scope_key")
-    if source_scope is not None and scope_key is not None:
+    source_evaluation_key = model.get_dimensions().get("evaluation_key")
+    if source_evaluation_key is not None and evaluation_key is not None:
         raise ValueError(
-            "scope_key conflict: the model already exposes scope_key; pass "
-            "scope_key=None to use the upstream value"
+            "evaluation_key conflict: the model already exposes evaluation_key; "
+            "pass evaluation_key=None to use the upstream value"
         )
-    if scope_key is None:
-        if source_scope is None:
+    if evaluation_key is None:
+        if source_evaluation_key is None:
             raise ValueError(
-                "scope_key must be a non-empty string unless the model exposes "
-                "an explicit scope_key dimension"
+                "evaluation_key must be a non-empty string unless the model exposes "
+                "an explicit evaluation_key dimension"
             )
-    elif not scope_key:
-        raise ValueError("scope_key must be a non-empty string")
+    elif not evaluation_key:
+        raise ValueError("evaluation_key must be a non-empty string")
 
     anchor_name, payload = _find_anchor(model)
     evidence_id = _require(payload, "evidence_id")
@@ -87,8 +89,8 @@ def with_node_identity(model: SemanticModel, *, scope_key: str | None) -> Semant
         node_type_dimension,
         "evidence_node_id",
     )
-    if scope_key is not None:
-        identity_names = ("scope_key", *identity_names)
+    if evaluation_key is not None:
+        identity_names = ("evaluation_key", *identity_names)
     existing = set(model.table.columns) | set(model.get_dimensions())
     collisions = sorted(name for name in identity_names if name in existing)
     if collisions:
@@ -99,15 +101,15 @@ def with_node_identity(model: SemanticModel, *, scope_key: str | None) -> Semant
     def anchor_string(table):
         return getattr(table, anchor_name).cast("string")
 
-    def scope_string(table):
-        if source_scope is not None:
-            return source_scope(table).cast("string")
-        return ibis.literal(scope_key)
+    def evaluation_key_string(table):
+        if source_evaluation_key is not None:
+            return source_evaluation_key(table).cast("string")
+        return ibis.literal(evaluation_key)
 
     def build_evidence_node_id(table):
         return (
             f"{IDENTITY_PREFIX}::"
-            + scope_string(table)
+            + evaluation_key_string(table)
             + f"::{evidence_id}::{evidence_version}::"
             + anchor_string(table)
             + "::"
@@ -119,8 +121,8 @@ def with_node_identity(model: SemanticModel, *, scope_key: str | None) -> Semant
         node_type_dimension: Dimension(expr=anchor_string, is_entity=True),
         "evidence_node_id": Dimension(expr=build_evidence_node_id, is_entity=True),
     }
-    if scope_key is not None:
-        new_dimensions["scope_key"] = Dimension(
-            expr=lambda table: ibis.literal(scope_key), is_entity=False
+    if evaluation_key is not None:
+        new_dimensions["evaluation_key"] = Dimension(
+            expr=lambda table: ibis.literal(evaluation_key), is_entity=False
         )
     return model.with_dimensions(**new_dimensions)
