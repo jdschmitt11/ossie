@@ -62,6 +62,9 @@ FIELD_TAG_KEYS = frozenset(
         "rule_version",
         "rule_audience_roles",
         "rule_applies_when",
+        "ml",
+        "ml_task",
+        "ml_target",
     }
 )
 
