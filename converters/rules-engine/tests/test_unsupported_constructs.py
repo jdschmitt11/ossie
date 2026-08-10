@@ -17,8 +17,10 @@
 
 """Everything out of pilot scope must raise rather than be silently dropped."""
 
+import json
 import pytest
 import yaml
+from ossie import OSIDocument
 
 from ossie_rules_engine import (
     ConversionError,
@@ -52,18 +54,18 @@ def test_the_unmodified_fixtures_convert():
     assert _rules()
 
 
-@pytest.mark.parametrize(
-    ("key", "value"),
-    [
-        ("filter", "source.plan_status = 'ACTIVE'"),
-    ],
-)
-def test_unsupported_top_level_constructs_raise(key, value):
-    def mutate(document):
-        document[key] = value
+def test_top_level_filter_is_preserved_for_non_joined_evidence():
+    filter_sql = "source.plan_status = 'ACTIVE'"
 
-    with pytest.raises(ConversionError, match=key):
-        _evidence(mutate)
+    def mutate(document):
+        document["filter"] = filter_sql
+
+    converted = _evidence(mutate)
+    model = OSIDocument.model_validate(yaml.safe_load(converted)).semantic_model[0]
+    metadata = {
+        ext.vendor_name: json.loads(ext.data) for ext in model.custom_extensions or []
+    }
+    assert metadata["DATABRICKS"]["filter"] == filter_sql
 
 
 @pytest.mark.parametrize("key", ["synonyms", "format", "edge_type", "joins", "source"])

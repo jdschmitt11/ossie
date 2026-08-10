@@ -23,7 +23,7 @@ import copy
 import json
 
 import yaml
-from ossie import OSIDataset, OSIDocument, OSISemanticModel
+from ossie import OSICustomExtension, OSIDataset, OSIDocument, OSISemanticModel
 from sqlglot import exp, parse_one
 from sqlglot.errors import ParseError
 
@@ -49,11 +49,15 @@ def convert_evidence_to_ossie(
 ) -> str:
     """Convert an evidence metric YAML document into an Ossie YAML document."""
     document = load_yaml(evidence_yaml)
+    filter_sql = document.get("filter")
+    if filter_sql is not None:
+        if not isinstance(filter_sql, str) or not filter_sql.strip():
+            raise ConversionError("evidence YAML filter must be a non-empty SQL string")
     if "joins" in document:
         return _convert_joined_evidence(
             document, model_name=model_name, evidence_id=evidence_id
         )
-    reject_unsupported(document)
+    reject_unsupported({key: value for key, value in document.items() if key != "filter"})
 
     source = document.get("source")
     if not source:
@@ -95,6 +99,26 @@ def convert_evidence_to_ossie(
             f"evidence YAML must declare exactly one anchor field, found {len(anchors)}"
         )
 
+    model_extensions = [
+        extension(
+            {
+                "artifact_kind": "evidence",
+                "source_format": SOURCE_FORMAT,
+                "source_format_version": str(document.get("version", "")),
+                "evidence_id": evidence_id,
+                "evidence_version": anchor_tags.get("evidence_version"),
+                "anchor_node_type": anchor_tags.get("node_type"),
+            }
+        )
+    ]
+    if filter_sql is not None:
+        model_extensions.append(
+            OSICustomExtension(
+                vendor_name="DATABRICKS",
+                data=json.dumps({"_v": STASH_VERSION, "filter": filter_sql}),
+            )
+        )
+
     model = OSISemanticModel(
         name=model_name,
         description=document.get("comment"),
@@ -107,18 +131,7 @@ def convert_evidence_to_ossie(
             )
         ],
         metrics=[build_metric(raw, source=source) for raw in raw_measures] or None,
-        custom_extensions=[
-            extension(
-                {
-                    "artifact_kind": "evidence",
-                    "source_format": SOURCE_FORMAT,
-                    "source_format_version": str(document.get("version", "")),
-                    "evidence_id": evidence_id,
-                    "evidence_version": anchor_tags.get("evidence_version"),
-                    "anchor_node_type": anchor_tags.get("node_type"),
-                }
-            )
-        ],
+        custom_extensions=model_extensions,
     )
     return OSIDocument(semantic_model=[model]).to_osi_yaml()
 
