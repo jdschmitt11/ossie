@@ -19,12 +19,39 @@
 **/.venv/
 
 **/.pytest_cache/
+**/.pytest-tmp/
+**/.tmp_pytest_runtime/
+**/.hypothesis/
+**/.mypy_cache/
 **/.ruff_cache/
 **/.coverage
+**/.coverage.*
 **/htmlcov/
+**/build/
 **/dist/
+**/site/
 **/target/
+**/*.egg-info/
 *.py[cod]
+
+# Local environments, credentials, and generated state
+.env
+.env.*
+!.env.example
+!.env.*.example
+.databricks/
+.databrickscfg
+.databricks-token
+token-cache.json
+venv/
+*.log
+*.tmp
+.ipynb_checkpoints/
+**/__marimo__/session/
+CLAUDE.local.md
+.claude/settings.local.json
+.DS_Store
+Thumbs.db
 
 # Go CLI
 cli/dist/
