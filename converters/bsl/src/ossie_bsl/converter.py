@@ -525,6 +525,18 @@ def _dimension_relation(source_model: SemanticModel) -> Any:
     return table.select(**{name: dimension(table) for name, dimension in dimensions.items()})
 
 
+def _chain_base(source_model: SemanticModel) -> Any:
+    """The upstream relation with every dimension materialised as a column.
+
+    A BSL model may declare a dimension as an expression over its table; the
+    chained projection reads dimensions by name, so each is computed here.
+    Physical columns that back measures are kept for MEASURE() reads.
+    """
+    table = source_model.table
+    dimensions = source_model.get_dimensions()
+    return table.mutate(**{name: dimension(table) for name, dimension in dimensions.items()})
+
+
 def _aggregate_relation(
     source_model: SemanticModel,
     *,
@@ -957,7 +969,7 @@ def convert_ossie_to_bsl(
                 for metric in metrics
             }
             metrics = []
-        base = source_model.table.alias(CHAIN_ALIAS)
+        base = _chain_base(source_model).alias(CHAIN_ALIAS)
         upstream_dimensions = {
             name: dimension
             for name, dimension in source_model.get_dimensions().items()

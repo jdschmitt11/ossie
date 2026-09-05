@@ -201,3 +201,33 @@ def test_the_anchor_stays_an_entity_dimension(con):
 def test_row_and_subject_grain_statuses_cannot_mix(con):
     with pytest.raises(ConversionError, match="mix"):
         _rules(con, _MIXED_GRAIN_RULES_YAML)
+
+
+def test_rules_chain_onto_a_model_with_a_computed_dimension(con):
+    """A source model may declare dimensions as expressions rather than columns;
+    the chained projection materialises them so rule fields can read them."""
+    from boring_semantic_layer.ops import Dimension
+
+    evidence = _evidence(con).with_dimensions(
+        has_initials=Dimension(expr=lambda table: table.physicist_initials.notnull())
+    )
+    rules_yaml = _RULES_HEADER + """\
+  - name: initials_present
+    expr: source.has_initials
+    tags:
+      - semantic_role:rule_status
+      - rule_id:MS-017
+      - rule_severity:LOW
+      - rule_family_id:ms_physics
+      - rule_subject_columns:physicist_initials
+      - rule_plain_english:Initials must be present.
+"""
+    model = evaluate_rules(
+        convert_ossie_to_bsl(
+            convert_rules_to_ossie(rules_yaml, model_name="ms_physics"), source_model=evidence
+        )
+    )
+
+    rows = _by_document(model, ["initials_present"])
+    assert rows["doc-pass"]["initials_present"] == "PASS"
+    assert rows["doc-none"]["initials_present"] == "FAIL"
