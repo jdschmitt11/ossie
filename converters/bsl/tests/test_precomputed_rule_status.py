@@ -109,8 +109,13 @@ def test_an_authored_status_string_is_projected_unchanged(con):
     assert statuses["plan-na"] == "NOT_APPLICABLE"
 
 
-def test_a_null_precomputed_status_becomes_pending(con):
-    """A missing status is still PENDING, matching the boolean-predicate path."""
+def test_a_null_precomputed_status_is_projected_as_null(con):
+    """The author owns a precomputed status vocabulary; a null is not re-encoded.
+
+    This matches the rules engine's render_precomputed_status, which projects
+    the authored expression unchanged."""
+    import pandas as pd
+
     statuses = (
         _rules(con)
         .query(dimensions=["plan_id", "laterality_agrees"])
@@ -119,4 +124,4 @@ def test_a_null_precomputed_status_becomes_pending(con):
         .to_dict()
     )
 
-    assert statuses["plan-null"] == "PENDING"
+    assert pd.isna(statuses["plan-null"])

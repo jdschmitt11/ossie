@@ -31,15 +31,16 @@ def _status(name: str, *, applies_when: bool, precomputed: bool = False):
 
     A boolean predicate maps to the PASS/FAIL/PENDING tri-state. A dimension
     tagged ``rule_status_encoding: precomputed`` already carries the complete
-    status string, so it is projected as authored; coercing that VARCHAR
-    through the boolean branch would fail outright. A null is PENDING in both
-    encodings: the rule did not produce a verdict.
+    status string and is projected exactly as authored, null included: the
+    author owns that vocabulary, and the rules engine's render_precomputed_status
+    never re-encoded it either. Coercing the VARCHAR through the boolean branch
+    would fail outright.
     """
 
     def build(table):
         column = getattr(table, name)
         if precomputed:
-            status = column.isnull().ifelse(PENDING, column)
+            status = column
         else:
             # DuckDB's ``(predicate) IS TRUE`` coerces a non-boolean predicate
             # (an integer, or a CASE whose branches are all NULL) to boolean.
