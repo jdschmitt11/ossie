@@ -22,7 +22,8 @@ from __future__ import annotations
 import json
 import operator
 import re
-from typing import Any, Mapping
+from dataclasses import dataclass
+from typing import Any, Iterable, Mapping
 
 import ibis
 import yaml
@@ -47,6 +48,11 @@ SOURCE_ALIAS = "source"
 #: Alias an upstream ``SemanticModel`` is bound to when chaining. It must differ
 #: from ``SOURCE_ALIAS`` or the two stages collide as duplicate CTE names.
 CHAIN_ALIAS = "rule_input"
+
+#: Alias the ungrouped evidence relation is bound to inside an aggregate rule
+#: source or a measure-authored status projection. Authored ``source.``
+#: references are rebound to it for the same duplicate-CTE reason.
+AGGREGATE_ALIAS = "rule_aggregate_input"
 
 #: Ibis transpiles the projection from this dialect. Authored expressions use
 #: ``TRY_CAST``, which is not ANSI SQL.
@@ -395,8 +401,62 @@ def _source_passthrough_field(field: OSIField) -> bool:
     )
 
 
-def _measure_source_spec(source: str) -> tuple[list[str], list[str]]:
-    """Validate the explicit metric-view query shape used as a rule source."""
+@dataclass(frozen=True)
+class RuleSourceSpec:
+    """The shape of an authored aggregate rule source.
+
+    ``dimensions`` are the bare GROUP BY columns, ``measures`` the names read
+    through ``MEASURE(name) AS name``, and ``aggregates`` every other item as
+    ``(alias, sql)``: a raw aggregate expression evaluated in the same GROUP BY.
+    """
+
+    dimensions: tuple[str, ...]
+    measures: tuple[str, ...]
+    aggregates: tuple[tuple[str, str], ...]
+
+
+def _quoted(name: str) -> str:
+    return exp.to_identifier(name, quoted=True).sql(dialect=SQL_DIALECT)
+
+
+def _measure_call_name(node: exp.Expression) -> str | None:
+    """Return ``name`` for a ``MEASURE(name)`` call, else ``None``."""
+    if not isinstance(node, exp.Anonymous) or node.name.upper() != "MEASURE":
+        return None
+    if len(node.expressions) != 1:
+        raise ConversionError("rule source supports only MEASURE(name) with one argument")
+    argument = node.expressions[0]
+    if not isinstance(argument, exp.Column) or argument.table:
+        raise ConversionError("MEASURE() must name one unqualified evidence measure")
+    return argument.name
+
+
+def _aggregate_item_sql(item: exp.Alias) -> str:
+    """Validate a raw aggregate SELECT item and render it against ``source``."""
+    expression = item.this
+    if expression.find(exp.AggFunc) is None:
+        raise ConversionError(
+            f"rule source item {item.alias!r} must be an aggregate expression or MEASURE(name)"
+        )
+    if any(_measure_call_name(node) is not None for node in expression.find_all(exp.Anonymous)):
+        raise ConversionError(
+            f"rule source item {item.alias!r} may not nest MEASURE() inside another expression"
+        )
+
+    def bind(node: exp.Expression) -> exp.Expression:
+        if not isinstance(node, exp.Column):
+            return node
+        if node.table and node.table != SOURCE_ALIAS:
+            raise ConversionError(
+                f"rule source item {item.alias!r} references unknown dataset {node.table!r}"
+            )
+        return exp.column(node.name, table=AGGREGATE_ALIAS)
+
+    return expression.transform(bind).sql(dialect=SQL_DIALECT)
+
+
+def parse_rule_source(source: str) -> RuleSourceSpec:
+    """Validate the aggregate query shape used as a rule source."""
     try:
         query = parse_one(source, read=SQL_DIALECT)
     except ParseError as exc:
@@ -417,26 +477,28 @@ def _measure_source_spec(source: str) -> tuple[list[str], list[str]]:
 
     dimensions: list[str] = []
     measures: list[str] = []
+    aggregates: list[tuple[str, str]] = []
     for item in query.expressions:
         if isinstance(item, exp.Column) and not item.table:
             dimensions.append(item.name)
             continue
-        if not isinstance(item, exp.Alias) or not isinstance(item.this, exp.Anonymous):
+        if not isinstance(item, exp.Alias):
             raise ConversionError(
-                "rule measure source SELECT items must be bare dimensions or MEASURE(name) AS name"
+                "rule measure source SELECT items must be bare dimensions, "
+                "MEASURE(name) AS name, or <aggregate> AS alias"
             )
-        measure_call = item.this
-        if measure_call.name.upper() != "MEASURE" or len(measure_call.expressions) != 1:
-            raise ConversionError("rule measure source supports only MEASURE(name) AS name")
-        measure_column = measure_call.expressions[0]
-        if not isinstance(measure_column, exp.Column) or measure_column.table:
-            raise ConversionError("MEASURE() must name one unqualified evidence measure")
-        if item.alias != measure_column.name:
-            raise ConversionError("MEASURE(name) must be aliased to the same name")
-        measures.append(measure_column.name)
-    if not dimensions or not measures or len(set(dimensions)) != len(dimensions):
+        measure_name = _measure_call_name(item.this)
+        if measure_name is not None:
+            if item.alias != measure_name:
+                raise ConversionError("MEASURE(name) must be aliased to the same name")
+            measures.append(measure_name)
+            continue
+        aggregates.append((item.alias, _aggregate_item_sql(item)))
+    outputs = [*dimensions, *measures, *(alias for alias, _ in aggregates)]
+    if not dimensions or len(outputs) == len(dimensions) or len(set(outputs)) != len(outputs):
         raise ConversionError(
-            "rule measure source requires unique dimensions and at least one MEASURE(name)"
+            "rule measure source requires unique dimensions and at least one "
+            "MEASURE(name) or aggregate item"
         )
     group = query.args.get("group")
     group_names = [
@@ -448,7 +510,50 @@ def _measure_source_spec(source: str) -> tuple[list[str], list[str]]:
         raise ConversionError(
             "rule measure source GROUP BY must list the selected dimensions in order"
         )
-    return dimensions, measures
+    return RuleSourceSpec(tuple(dimensions), tuple(measures), tuple(aggregates))
+
+
+def rule_source_measure_names(source: str) -> list[str]:
+    """Names an authored rule source reads through ``MEASURE(name)``."""
+    return list(parse_rule_source(source).measures)
+
+
+def _dimension_relation(source_model: SemanticModel) -> Any:
+    """The ungrouped upstream relation with every dimension as a column."""
+    table = source_model.table
+    dimensions = source_model.get_dimensions()
+    return table.select(**{name: dimension(table) for name, dimension in dimensions.items()})
+
+
+def _aggregate_relation(
+    source_model: SemanticModel,
+    *,
+    group: list[str],
+    measures: list[str],
+    aggregates: list[tuple[str, str]],
+) -> Any:
+    """One row per ``group``: BSL measures joined with raw aggregate items."""
+    relation = None
+    if measures:
+        relation = source_model.query(dimensions=group, measures=measures).to_untagged()
+    if aggregates:
+        selections = [*(_quoted(name) for name in group)]
+        selections.extend(f"{sql} AS {_quoted(alias)}" for alias, sql in aggregates)
+        raw = _dimension_relation(source_model).alias(AGGREGATE_ALIAS).sql(
+            f"SELECT {', '.join(selections)} FROM {AGGREGATE_ALIAS} "
+            f"GROUP BY {', '.join(_quoted(name) for name in group)}",
+            dialect=SQL_DIALECT,
+        )
+        relation = raw if relation is None else relation.join(raw, group)
+    return relation
+
+
+def _structural_dimensions(source_model: SemanticModel, *, selected: list[str]) -> list[str]:
+    return [
+        name
+        for name, dimension in source_model.get_dimensions().items()
+        if dimension.is_entity and name not in selected
+    ]
 
 
 def query_rule_source_model(
@@ -456,30 +561,140 @@ def query_rule_source_model(
     *,
     source: str,
     primary_key: list[str] | None = None,
+    measure_columns: Iterable[str] = (),
 ) -> SemanticModel:
-    """Evaluate a declared metric-view query lazily through BSL."""
-    dimensions, measures = _measure_source_spec(source)
+    """Evaluate a declared aggregate rule-source query lazily through BSL.
+
+    ``MEASURE(name)`` reads a measure of ``source_model``. When the evidence
+    has already been materialised, a former measure is a plain column; the
+    caller lists such columns in ``measure_columns`` to vouch that each is
+    constant within every group, and the converter reads it with ``MAX``.
+    """
+    spec = parse_rule_source(source)
     upstream_dimensions = source_model.get_dimensions()
-    missing = sorted(set(dimensions).difference(upstream_dimensions))
+    missing = sorted(set(spec.dimensions).difference(upstream_dimensions))
     if missing:
         raise ConversionError(
             "rule measure source references unknown evidence dimensions: " + ", ".join(missing)
         )
-    missing_anchor = sorted(set(primary_key or []).difference(dimensions))
+    missing_anchor = sorted(set(primary_key or []).difference(spec.dimensions))
     if missing_anchor:
         raise ConversionError(
             "rule measure source must select its primary key dimensions: "
             + ", ".join(missing_anchor)
         )
-    structural_dimensions = [
-        name
-        for name, dimension in upstream_dimensions.items()
-        if dimension.is_entity and name not in dimensions
-    ]
-    aggregate = source_model.query(
-        dimensions=[*dimensions, *structural_dimensions], measures=measures
+    known_measures = set(source_model.get_measures()) | set(
+        source_model.get_calculated_measures()
     )
-    return _rebind_semantic_relation(aggregate.to_untagged(), source_model=source_model)
+    constant_columns = set(measure_columns)
+    measures: list[str] = []
+    aggregates = list(spec.aggregates)
+    for name in spec.measures:
+        if name in known_measures:
+            measures.append(name)
+        elif name in constant_columns and name in upstream_dimensions:
+            aggregates.append((name, f"MAX({AGGREGATE_ALIAS}.{_quoted(name)})"))
+        else:
+            raise ConversionError(
+                f"MEASURE({name}) names neither a measure of the source model nor a "
+                "column declared constant per group in measure_columns"
+            )
+    for alias, sql in aggregates:
+        unknown = sorted(
+            {
+                column.name
+                for column in parse_one(sql, read=SQL_DIALECT).find_all(exp.Column)
+                if column.name not in upstream_dimensions
+            }
+        )
+        if unknown:
+            raise ConversionError(
+                f"rule source item {alias!r} references unknown evidence dimensions: "
+                + ", ".join(unknown)
+            )
+    group = [*spec.dimensions, *_structural_dimensions(source_model, selected=list(spec.dimensions))]
+    relation = _aggregate_relation(
+        source_model, group=group, measures=measures, aggregates=aggregates
+    )
+    return _rebind_semantic_relation(relation, source_model=source_model)
+
+
+def _rules_engine_payload(obj: Any) -> dict[str, Any]:
+    payload = _extensions(obj).get(_RULES_ENGINE_VENDOR)
+    return payload if isinstance(payload, dict) else {}
+
+
+def _subject_columns(payload: Mapping[str, Any]) -> list[str]:
+    raw = payload.get("rule_subject_columns") or []
+    if isinstance(raw, str):
+        raw = raw.split(",")
+    return [str(column).strip() for column in raw if str(column).strip()]
+
+
+def _bound_metric_sql(metric: Any, *, dataset: OSIDataset) -> str:
+    """Render a metric expression against the ``source`` alias."""
+    try:
+        parsed = parse_one(_pick_expression(metric), read=SQL_DIALECT)
+    except ParseError as exc:
+        raise ConversionError(f"cannot parse metric {metric.name!r}") from exc
+
+    def bind(node: exp.Expression) -> exp.Expression:
+        if not isinstance(node, exp.Column):
+            return node
+        if node.table and node.table not in {SOURCE_ALIAS, dataset.name}:
+            raise ConversionError(
+                f"metric {metric.name!r} references unknown dataset {node.table!r}"
+            )
+        return exp.column(node.name, table=AGGREGATE_ALIAS)
+
+    return parsed.transform(bind).sql(dialect=SQL_DIALECT)
+
+
+def _aggregate_status_model(
+    source_model: SemanticModel,
+    *,
+    dataset: OSIDataset,
+    metrics: list[Any],
+) -> SemanticModel:
+    """Collapse the evidence to one row per anchor for measure-authored statuses.
+
+    Every metric is evaluated in one GROUP BY over the anchor (plus any other
+    upstream entity dimension); each rule's subject columns ride along as
+    ``MAX(column)`` so the observed values stay available per subject.
+    """
+    upstream_dimensions = source_model.get_dimensions()
+    anchors: list[str] = []
+    for field in dataset.fields:
+        if field.name not in (dataset.primary_key or []):
+            continue
+        if field.name not in upstream_dimensions or not _source_passthrough_field(field):
+            raise ConversionError(
+                f"aggregate rule statuses require anchor {field.name!r} to pass through "
+                "an identically named evidence dimension"
+            )
+        anchors.append(field.name)
+    if not anchors:
+        raise ConversionError("aggregate rule statuses require a primary key anchor")
+    group = [*anchors, *_structural_dimensions(source_model, selected=anchors)]
+    metric_names = {metric.name for metric in metrics}
+    aggregates: list[tuple[str, str]] = []
+    carried: list[str] = []
+    for metric in metrics:
+        for column in _subject_columns(_rules_engine_payload(metric)):
+            if column in metric_names or column in group or column in carried:
+                continue
+            if column not in upstream_dimensions:
+                raise ConversionError(
+                    f"metric {metric.name!r} names unknown subject column {column!r}"
+                )
+            carried.append(column)
+    aggregates.extend((column, f"MAX({AGGREGATE_ALIAS}.{_quoted(column)})") for column in carried)
+    aggregates.extend(
+        (metric.name, _bound_metric_sql(metric, dataset=dataset)) for metric in metrics
+    )
+    relation = _aggregate_relation(source_model, group=group, measures=[], aggregates=aggregates)
+    return _rebind_semantic_relation(relation, source_model=source_model)
+
 
 
 def rebind_rule_source_model(source_model: SemanticModel) -> SemanticModel:
@@ -665,12 +880,15 @@ def convert_ossie_to_bsl(
     *,
     tables: Mapping[str, Any] | None = None,
     source_model: SemanticModel | None = None,
+    measure_columns: Iterable[str] = (),
 ) -> SemanticModel:
     """Build a lazy BSL ``SemanticModel`` from an Ossie YAML document.
 
     Pass ``tables`` to project over a physical table, or ``source_model`` to
     chain onto an existing model. Nothing is executed; the result materialises
-    only on ``.query(...).execute()``.
+    only on ``.query(...).execute()``. ``measure_columns`` lists columns of
+    ``source_model`` that an aggregate rule source may read through
+    ``MEASURE(name)`` (see :func:`query_rule_source_model`).
     """
     if (tables is None) == (source_model is None):
         raise ConversionError("pass exactly one of tables= or source_model=")
@@ -697,15 +915,54 @@ def convert_ossie_to_bsl(
         )
 
     upstream_dimensions: dict[str, Dimension] = {}
+    metrics = list(model.metrics or [])
+    metric_dimensions: dict[str, Dimension] = {}
+    status_metrics = [
+        metric for metric in metrics if _rules_engine_payload(metric).get("semantic_role") == "rule_status"
+    ]
+    if status_metrics and source_model is None:
+        raise ConversionError("measure-authored rule statuses require source_model=")
     if model.relationships:
         sql = None
     elif source_model is not None:
         if dataset.source.lstrip().upper().startswith("SELECT"):
             source_model = query_rule_source_model(
-                source_model, source=dataset.source, primary_key=list(dataset.primary_key or [])
+                source_model,
+                source=dataset.source,
+                primary_key=list(dataset.primary_key or []),
+                measure_columns=measure_columns,
             )
+        if status_metrics:
+            status_fields = sorted(
+                field.name
+                for field in dataset.fields
+                if _rules_engine_payload(field).get("semantic_role") == "rule_status"
+            )
+            if status_fields:
+                raise ConversionError(
+                    "a rule family cannot mix row-grain status fields with measure-authored "
+                    "statuses: " + ", ".join(status_fields)
+                )
+            source_model = _aggregate_status_model(source_model, dataset=dataset, metrics=metrics)
+            metric_dimensions = {
+                metric.name: Dimension(
+                    expr=_reference(metric.name),
+                    description=metric.description,
+                    metadata=(
+                        {NAMESPACE: {"field_extensions": _extensions(metric)}}
+                        if _extensions(metric)
+                        else {}
+                    ),
+                )
+                for metric in metrics
+            }
+            metrics = []
         base = source_model.table.alias(CHAIN_ALIAS)
-        upstream_dimensions = source_model.get_dimensions()
+        upstream_dimensions = {
+            name: dimension
+            for name, dimension in source_model.get_dimensions().items()
+            if name not in metric_dimensions
+        }
         upstream_names = set(source_model.table.columns) | set(upstream_dimensions)
         reused_fields = {
             field.name
@@ -732,7 +989,7 @@ def convert_ossie_to_bsl(
             alias=CHAIN_ALIAS,
             passthrough=True,
             fields=[field for field in dataset.fields if field.name not in reused_fields],
-            metrics=list(model.metrics or []),
+            metrics=metrics,
         )
     else:
         if dataset.source not in tables:
@@ -742,7 +999,7 @@ def convert_ossie_to_bsl(
             dataset,
             alias=SOURCE_ALIAS,
             passthrough=False,
-            metrics=list(model.metrics or []),
+            metrics=metrics,
         )
         # The artifact filter applies here exactly as on the joined path: the
         # rules engine evaluates only surviving rows, so the projection must too.
@@ -752,7 +1009,6 @@ def convert_ossie_to_bsl(
 
     if not model.relationships:
         projected = base.sql(sql, dialect=SQL_DIALECT)
-    metrics = list(model.metrics or [])
 
     primary_key = set(dataset.primary_key or [])
     model_extensions = _extensions(model)
@@ -776,7 +1032,7 @@ def convert_ossie_to_bsl(
 
     semantic_model = to_semantic_table(
         projected, name=model.name, description=model.description
-    ).with_dimensions(**upstream_dimensions, **dimensions)
+    ).with_dimensions(**upstream_dimensions, **metric_dimensions, **dimensions)
     if metrics:
         base_metrics = {
             metric.name: base
