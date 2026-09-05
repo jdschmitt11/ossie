@@ -568,6 +568,31 @@ def _structural_dimensions(source_model: SemanticModel, *, selected: list[str]) 
     ]
 
 
+def _anchor_source_columns(dataset: OSIDataset) -> list[str]:
+    """Columns the dataset's primary-key fields read from their source.
+
+    A rules document may name its anchor differently from the evidence it
+    chains onto (``plan_id: source.sk_plan``). What must survive an aggregate
+    rule source is the column the anchor is derived from, not the anchor's own
+    name, so resolve each primary-key field to the columns its expression
+    reads.
+    """
+    by_name = {field.name: field for field in dataset.fields}
+    columns: list[str] = []
+    for name in dataset.primary_key or []:
+        field = by_name.get(name)
+        if field is None:
+            columns.append(name)
+            continue
+        try:
+            expression = parse_one(_pick_expression(field), read=SQL_DIALECT)
+        except ParseError as exc:
+            raise ConversionError(f"cannot parse anchor expression for {name!r}") from exc
+        referenced = [column.name for column in expression.find_all(exp.Column)]
+        columns.extend(referenced or [name])
+    return list(dict.fromkeys(columns))
+
+
 def query_rule_source_model(
     source_model: SemanticModel,
     *,
@@ -593,7 +618,7 @@ def query_rule_source_model(
     missing_anchor = sorted(set(primary_key or []).difference(group))
     if missing_anchor:
         raise ConversionError(
-            "rule measure source must group by its primary key dimensions: "
+            "rule measure source drops the column(s) its anchor is derived from: "
             + ", ".join(missing_anchor)
         )
     known_measures = set(source_model.get_measures()) | set(
@@ -941,7 +966,7 @@ def convert_ossie_to_bsl(
             source_model = query_rule_source_model(
                 source_model,
                 source=dataset.source,
-                primary_key=list(dataset.primary_key or []),
+                primary_key=_anchor_source_columns(dataset),
                 measure_columns=measure_columns,
             )
         if status_metrics:

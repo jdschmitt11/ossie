@@ -168,7 +168,7 @@ def test_measure_names_are_reported_for_the_caller(evidence):
     assert rule_source_measure_names(_SOURCE) == ["min_iso_x_mm"]
 
 
-def test_the_primary_key_may_be_a_structural_entity_dimension(evidence):
+def test_the_anchor_may_be_a_structural_entity_dimension(evidence):
     """The rules engine anchors on subject_node_id while the authored query
     groups by the natural key; an entity dimension riding along with the
     group satisfies the anchor."""
@@ -182,11 +182,73 @@ def test_the_primary_key_may_be_a_structural_entity_dimension(evidence):
     assert _rows(model, ["sk_plan", "evaluation_key"])[0] == {"sk_plan": "p1", "evaluation_key": "k"}
 
 
-def test_a_primary_key_absent_from_the_group_is_rejected(evidence):
+def test_an_anchor_column_absent_from_the_group_is_rejected(evidence):
     source = """
         SELECT sk_plan, MAX(dx_laterality) AS dx_laterality
         FROM radonc.evidence.laterality_context
         GROUP BY sk_plan
     """
-    with pytest.raises(ConversionError, match="primary key"):
+    with pytest.raises(ConversionError, match="anchor is derived from"):
         query_rule_source_model(evidence, source=source, primary_key=["dx_laterality"])
+
+
+def test_an_anchor_the_rules_document_renames_resolves_through_its_expression(evidence):
+    """A rules document may name its anchor differently from the evidence.
+
+    dc_laterality declares ``plan_id: source.sk_plan`` while its rule source
+    groups by ``sk_plan``. The anchor survives the aggregation — it is derived
+    from a grouped column — so requiring the anchor's own *name* in the group
+    would reject a correct document.
+    """
+    from ossie_bsl import convert_ossie_to_bsl, evaluate_rules
+    from ossie_rules_engine import convert_rules_to_ossie
+
+    rules_yaml = """\
+version: '1.1'
+rule_family_version: '1.0.0'
+evidence_id: 'laterality.context'
+evidence_version: '1.0.0'
+render_hint: presence
+source: |-
+  SELECT sk_plan, MAX(dx_laterality) AS dx_laterality
+  FROM radonc.evidence.laterality_context
+  GROUP BY sk_plan
+use_cases: [patient]
+dimensions:
+  - name: plan_id
+    expr: source.sk_plan
+    tags: [rules_engine:anchor, node_type:plan, semantic_role:entity_key]
+  - name: dx_known
+    expr: source.dx_laterality IS NOT NULL
+    tags:
+      - semantic_role:rule_status
+      - rule_id:DC-021
+      - rule_severity:HIGH
+      - rule_family_id:dc_laterality
+      - rule_subject_columns:dx_laterality
+      - rule_plain_english:A diagnosis laterality must be recorded.
+"""
+    model = evaluate_rules(
+        convert_ossie_to_bsl(
+            convert_rules_to_ossie(rules_yaml, model_name="dc_laterality"),
+            source_model=evidence,
+        )
+    )
+
+    rows = (
+        model.query(dimensions=["plan_id", "dx_known"])
+        .execute()
+        .set_index("plan_id")["dx_known"]
+        .to_dict()
+    )
+    assert rows == {"p1": "PASS", "p2": "PASS", "p3": "FAIL"}
+
+
+def test_an_anchor_reading_a_column_the_group_drops_is_rejected(evidence):
+    source = """
+        SELECT sk_plan, MAX(dx_laterality) AS dx_laterality
+        FROM radonc.evidence.laterality_context
+        GROUP BY sk_plan
+    """
+    with pytest.raises(ConversionError, match="eclipse_laterality"):
+        query_rule_source_model(evidence, source=source, primary_key=["eclipse_laterality"])
