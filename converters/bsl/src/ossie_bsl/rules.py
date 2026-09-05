@@ -26,10 +26,22 @@ def _rule_metadata(dimension: Dimension) -> dict[str, Any] | None:
     return payload
 
 
-def _status(name: str, *, applies_when: bool):
+def _status(name: str, *, applies_when: bool, precomputed: bool = False):
+    """Build the lazy status expression for one rule dimension.
+
+    A boolean predicate maps to the PASS/FAIL/PENDING tri-state. A dimension
+    tagged ``rule_status_encoding: precomputed`` already carries the complete
+    status string, so it is projected as authored; coercing that VARCHAR
+    through the boolean branch would fail outright. A null is PENDING in both
+    encodings: the rule did not produce a verdict.
+    """
+
     def build(table):
         column = getattr(table, name)
-        status = column.isnull().ifelse(PENDING, column.ifelse(PASS, FAIL))
+        if precomputed:
+            status = column.isnull().ifelse(PENDING, column)
+        else:
+            status = column.isnull().ifelse(PENDING, column.ifelse(PASS, FAIL))
         if not applies_when:
             return status
         applicable = getattr(table, applies_when_column(name)).fill_null(False)
@@ -52,7 +64,11 @@ def evaluate_rules(predicate_model: SemanticModel) -> SemanticModel:
                 f"{', '.join(missing)}"
             )
         statuses[name] = Dimension(
-            expr=_status(name, applies_when="rule_applies_when" in metadata),
+            expr=_status(
+                name,
+                applies_when="rule_applies_when" in metadata,
+                precomputed=metadata.get("rule_status_encoding") == "precomputed",
+            ),
             description=dimension.description,
             is_entity=dimension.is_entity,
             metadata=dimension.metadata,
