@@ -18,14 +18,13 @@ from ossie_rules_engine import convert_evidence_to_ossie
 
 ARTIFACT = (
     Path(__file__).parents[4]
-    / "radonc_semantics/src/radonc_semantics/artifacts/evidence"
+    / "radonc_semantics/src/radonc_semantics/analytics/artifacts/evidence"
     / "plan_site_setup_context.metric.yaml"
 )
 
 FIELDS = [
     "sk_plan",
     "sk_site_setup",
-    "plan_data_source",
     "setup_data_source",
     "plan_treatment_orientation",
     "setup_patient_orientation",
@@ -42,10 +41,10 @@ def test_joined_artifact_matches_its_sql_and_applies_the_filter():
         "('varian-plan', 10, 'varian_dwh'), "
         "('mosaiq-plan', 20, 'mosaiq_live'), "
         "('cyberknife-plan', 30, 'cyberknife')"
-        ") AS t(sk_plan, sk_site_setup, _left_data_source)"
+        ") AS t(sk_plan, sk_site_setup, _data_source)"
     )
     con.raw_sql(
-        "CREATE TABLE gold_plan_with_sk AS "
+        "CREATE TABLE gold_approved_non_qa_plans AS "
         "SELECT * FROM (VALUES "
         "('varian-plan', 'varian_dwh', 'HFS'), "
         "('mosaiq-plan', 'mosaiq_live', 'HFP'), "
@@ -70,7 +69,7 @@ def test_joined_artifact_matches_its_sql_and_applies_the_filter():
         ossie_yaml,
         tables={
             "gold_edge_plan_to_site_setup": con.table("gold_edge_plan_to_site_setup"),
-            "gold_plan_with_sk": con.table("gold_plan_with_sk"),
+            "gold_approved_non_qa_plans": con.table("gold_approved_non_qa_plans"),
             "gold_site_setup_with_sk": con.table("gold_site_setup_with_sk"),
         },
     )
@@ -79,15 +78,15 @@ def test_joined_artifact_matches_its_sql_and_applies_the_filter():
 
     actual = model.query(dimensions=FIELDS).execute().sort_values(FIELDS).reset_index(drop=True)
     expected = con.sql(
-        "SELECT e.sk_plan, e.sk_site_setup, p._data_source AS plan_data_source, "
+        "SELECT e.sk_plan, e.sk_site_setup, "
         "s._data_source AS setup_data_source, p.treatment_orientation "
         "AS plan_treatment_orientation, s.patient_orientation "
         "AS setup_patient_orientation, TRY_CAST(s.status AS BIGINT) AS setup_status, "
         "s.sign_date_time AS setup_sign_date_time "
         "FROM gold_edge_plan_to_site_setup e "
-        "LEFT JOIN gold_plan_with_sk p ON e.sk_plan = p.sk_plan "
+        "LEFT JOIN gold_approved_non_qa_plans p ON e.sk_plan = p.sk_plan "
         "LEFT JOIN gold_site_setup_with_sk s ON e.sk_site_setup = s.sk_site_setup "
-        "WHERE e._left_data_source NOT IN ('mosaiq_live', 'cyberknife', 'ck')"
+        "WHERE e._data_source NOT IN ('mosaiq_live', 'cyberknife', 'ck')"
     ).execute().sort_values(FIELDS).reset_index(drop=True)
 
     pd.testing.assert_frame_equal(actual, expected)
@@ -455,7 +454,7 @@ measures:
 def test_laterality_aggregate_measures_execute_through_ossie_and_bsl():
     con = ibis.duckdb.connect()
     tables = {
-        "gold_plan_with_sk": {"sk_plan": ["p1"]},
+        "gold_approved_non_qa_plans": {"sk_plan": ["p1"]},
         "gold_edge_prescription_to_plan": {"sk_plan": ["p1"], "sk_prescription": ["rx1"]},
         "gold_prescription_with_sk": {"sk_prescription": ["rx1"]},
         "gold_edge_course_to_prescription": {"sk_prescription": ["rx1"], "sk_treatment_course": ["c1"]},
@@ -470,7 +469,7 @@ def test_laterality_aggregate_measures_execute_through_ossie_and_bsl():
 
     artifact = (
         Path(__file__).parents[4]
-        / "radonc_semantics/src/radonc_semantics/artifacts/evidence"
+        / "radonc_semantics/src/radonc_semantics/analytics/artifacts/evidence"
         / "laterality_context.metric.yaml"
     )
     evidence = yaml.safe_load(artifact.read_text())

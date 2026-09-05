@@ -744,6 +744,11 @@ def convert_ossie_to_bsl(
             passthrough=False,
             metrics=list(model.metrics or []),
         )
+        # The artifact filter applies here exactly as on the joined path: the
+        # rules engine evaluates only surviving rows, so the projection must too.
+        filter_sql = _databricks_filter(model)
+        if filter_sql is not None:
+            sql = f"{sql} WHERE {filter_sql}"
 
     if not model.relationships:
         projected = base.sql(sql, dialect=SQL_DIALECT)

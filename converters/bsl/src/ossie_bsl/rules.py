@@ -41,7 +41,11 @@ def _status(name: str, *, applies_when: bool, precomputed: bool = False):
         if precomputed:
             status = column.isnull().ifelse(PENDING, column)
         else:
-            status = column.isnull().ifelse(PENDING, column.ifelse(PASS, FAIL))
+            # DuckDB's ``(predicate) IS TRUE`` coerces a non-boolean predicate
+            # (an integer, or a CASE whose branches are all NULL) to boolean.
+            # Match that rather than failing on a non-boolean column.
+            predicate = column if column.type().is_boolean() else column.cast("boolean")
+            status = predicate.isnull().ifelse(PENDING, predicate.ifelse(PASS, FAIL))
         if not applies_when:
             return status
         applicable = getattr(table, applies_when_column(name)).fill_null(False)

@@ -144,8 +144,8 @@ def test_anchor_field_keeps_its_structured_tag_extension():
 def _authored_evidence_with_measure(**measure_overrides):
     artifact = (
         Path(__file__).parents[4]
-        / "radonc_semantics/src/radonc_semantics/artifacts/evidence"
-        / "self_volume_evidence.metric.yaml"
+        / "radonc_semantics/src/radonc_semantics/analytics/artifacts/evidence"
+        / "self_activity_evidence.metric.yaml"
     )
     authored = yaml.safe_load(artifact.read_text())
     measure = {
@@ -162,8 +162,8 @@ def test_evidence_preserves_its_uc_metric_measure():
         yaml.safe_load(
             convert_evidence_to_ossie(
                 yaml.safe_dump(_authored_evidence_with_measure(), sort_keys=False),
-                model_name="self_volume_evidence",
-                evidence_id="self.volume_evidence",
+                model_name="self_activity_evidence",
+                evidence_id="self.activity_evidence",
             )
         )
     )
@@ -183,8 +183,8 @@ def test_measure_synonyms_and_format_map_to_their_native_ossie_homes():
         yaml.safe_load(
             convert_evidence_to_ossie(
                 yaml.safe_dump(authored, sort_keys=False),
-                model_name="self_volume_evidence",
-                evidence_id="self.volume_evidence",
+                model_name="self_activity_evidence",
+                evidence_id="self.activity_evidence",
             )
         )
     )

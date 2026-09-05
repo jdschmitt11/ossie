@@ -15,7 +15,7 @@ from ossie_rules_engine.evidence import _as_select_source
 
 ARTIFACT = (
     Path(__file__).parents[4]
-    / "radonc_semantics/src/radonc_semantics/artifacts/evidence"
+    / "radonc_semantics/src/radonc_semantics/analytics/artifacts/evidence"
     / "plan_site_setup_context.metric.yaml"
 )
 
@@ -32,7 +32,7 @@ def test_joined_evidence_uses_databricks_importer_and_keeps_rules_metadata():
 
     assert {name: dataset.source for name, dataset in datasets.items()} == {
         "plan_site_setup_context": "gold_edge_plan_to_site_setup",
-        "plan": "gold_plan_with_sk",
+        "plan": "gold_approved_non_qa_plans",
         "site_setup": "gold_site_setup_with_sk",
     }
     assert datasets["plan_site_setup_context"].primary_key == ["sk_plan"]
@@ -53,7 +53,7 @@ def test_joined_evidence_uses_databricks_importer_and_keeps_rules_metadata():
         ext.vendor_name: json.loads(ext.data) for ext in model.custom_extensions
     }
     assert model_metadata["DATABRICKS"]["filter"] == (
-        "source._left_data_source NOT IN ('mosaiq_live', 'cyberknife', 'ck')"
+        "source._data_source NOT IN ('mosaiq_live', 'cyberknife', 'ck')"
     )
 
     fields = {field.name: field for field in datasets["plan_site_setup_context"].fields}
@@ -87,7 +87,7 @@ def test_join_metadata_is_preserved_in_the_ossie_relationship_extension():
 def test_plan_offset_parity_preserves_author_edge_metadata():
     artifact = (
         Path(__file__).parents[4]
-        / "radonc_semantics/src/radonc_semantics/artifacts/evidence"
+        / "radonc_semantics/src/radonc_semantics/analytics/artifacts/evidence"
         / "plan_offset_parity_context.metric.yaml"
     )
 
@@ -118,7 +118,7 @@ def test_inline_sql_source_is_not_wrapped_again():
 def test_laterality_context_preserves_its_child_join_filter_without_rewriting_source():
     artifact = (
         Path(__file__).parents[4]
-        / "radonc_semantics/src/radonc_semantics/artifacts/evidence"
+        / "radonc_semantics/src/radonc_semantics/analytics/artifacts/evidence"
         / "laterality_context.metric.yaml"
     )
 
@@ -138,26 +138,28 @@ def test_laterality_context_preserves_its_child_join_filter_without_rewriting_so
     assert "dx._data_source" in metadata["RULES_ENGINE"]["join_filter"]
 
 
-def test_document_assessment_summary_converts_as_a_declared_join():
+def test_document_physics_assessment_converts_as_a_declared_join():
+    """The document/physics-assessment join lives in its own artifact now;
+    self_document_evidence is single-source again."""
     artifact = (
         Path(__file__).parents[4]
-        / "radonc_semantics/src/radonc_semantics/artifacts/evidence"
-        / "self_document_evidence.metric.yaml"
+        / "radonc_semantics/src/radonc_semantics/analytics/artifacts/evidence"
+        / "document_physics_assessment_evidence.metric.yaml"
     )
 
     converted = convert_evidence_to_ossie(
         artifact.read_text(),
-        model_name="self_document_evidence",
-        evidence_id="self.document_evidence",
+        model_name="document_physics_assessment_evidence",
+        evidence_id="document.physics_assessment_evidence",
     )
     model = OSIDocument.model_validate(yaml.safe_load(converted)).semantic_model[0]
-    assert {relationship.to for relationship in model.relationships} == {"physics_assessment"}
+    assert {relationship.to for relationship in model.relationships} == {'document', 'physics_assessment'}
 
 
 def test_plan_imrt_charge_summary_converts_as_a_declared_join():
     artifact = (
         Path(__file__).parents[4]
-        / "radonc_semantics/src/radonc_semantics/artifacts/evidence"
+        / "radonc_semantics/src/radonc_semantics/analytics/artifacts/evidence"
         / "plan_imrt_charge_context.metric.yaml"
     )
     converted = convert_evidence_to_ossie(
@@ -166,4 +168,4 @@ def test_plan_imrt_charge_summary_converts_as_a_declared_join():
         evidence_id="plan.imrt_charge_context",
     )
     model = OSIDocument.model_validate(yaml.safe_load(converted)).semantic_model[0]
-    assert {relationship.to for relationship in model.relationships} == {"charges"}
+    assert {relationship.to for relationship in model.relationships} == {'ck_field', 'imrt_field', 'mosaiq_field', 'patient_activity', 'varian_field'}
