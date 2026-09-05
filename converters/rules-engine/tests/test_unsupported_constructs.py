@@ -101,16 +101,27 @@ def test_an_expression_referencing_an_undeclared_table_raises():
 @pytest.mark.parametrize(
     "tag",
     [
-        "rule_status_encoding:precomputed",
-        "rule_threshold_ref:some.threshold",
-        "rule_observation_roles:reviewer",
+        "rule_render_widget:timeline",
+        "rule_owner:physics",
     ],
 )
-def test_rule_tags_outside_the_pilot_raise(tag):
+def test_rule_tags_outside_the_vocabulary_raise(tag):
+    """An unrecognised tag must raise rather than be silently dropped."""
+
     def mutate(document):
         document["dimensions"][1]["tags"].append(tag)
 
     with pytest.raises(ConversionError, match="unsupported tag"):
+        _rules(mutate)
+
+
+def test_malformed_observation_roles_raise():
+    """rule_observation_roles is a role=column mapping, not a bare list."""
+
+    def mutate(document):
+        document["dimensions"][1]["tags"].append("rule_observation_roles:reviewer")
+
+    with pytest.raises(ConversionError, match="expected role=column"):
         _rules(mutate)
 
 

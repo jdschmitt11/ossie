@@ -27,11 +27,13 @@ from ._common import (
     SOURCE_FORMAT,
     ConversionError,
     build_field,
+    build_metric,
     check_unique_names,
     extension,
     load_yaml,
     parse_tags,
     read_fields,
+    read_measures,
     reject_unsupported,
 )
 
@@ -44,13 +46,36 @@ REQUIRED_RULE_KEYS = ("rule_id", "rule_severity", "rule_family_id", "rule_plain_
 #: Tags authored as a comma-separated list rather than a scalar string.
 _CSV_KEYS = ("rule_subject_columns", "rule_audience_roles")
 
+#: Tags authored as a comma-separated list of ``role=column`` pairs.
+_MAPPING_KEYS = ("rule_observation_roles",)
+
+
+def _mapping(value: str, *, key: str) -> dict[str, str]:
+    """Parse ``role=column,role=column`` into a mapping, rejecting malformed pairs."""
+    parsed: dict[str, str] = {}
+    for entry in value.split(","):
+        role, separator, column = entry.partition("=")
+        if not separator or not role.strip() or not column.strip():
+            raise ConversionError(f"{key}: malformed entry {entry!r}; expected role=column")
+        if role.strip() in parsed:
+            raise ConversionError(f"{key}: duplicate role {role.strip()!r}")
+        parsed[role.strip()] = column.strip()
+    return parsed
+
 
 def _structure(tags: dict[str, str]) -> dict[str, Any]:
-    """Apply per-key value shaping. Subject columns and audience roles are CSV lists."""
+    """Apply per-key value shaping.
+
+    Subject columns and audience roles are CSV lists; observation roles are a
+    ``role=column`` mapping. Everything else stays the authored scalar.
+    """
     payload: dict[str, Any] = dict(tags)
     for key in _CSV_KEYS:
         if key in payload:
             payload[key] = [value.strip() for value in payload[key].split(",")]
+    for key in _MAPPING_KEYS:
+        if key in payload:
+            payload[key] = _mapping(payload[key], key=key)
     return payload
 
 
@@ -101,12 +126,36 @@ def convert_rules_to_ossie(rules_yaml: str, *, model_name: str) -> str:
             )
         )
 
+    metrics = []
+    for raw in read_measures(document):
+        name = raw.get("name", "<unnamed>")
+        raw_measure = dict(raw)
+        measure_tags = raw_measure.pop("tags", None)
+        is_anchor, tags = parse_tags(measure_tags, field_name=name)
+        if is_anchor:
+            raise ConversionError(f"measure {name!r} must not carry the anchor tag")
+        metric = build_metric(raw_measure, source=source)
+        if tags.get("semantic_role") == RULE_ROLE:
+            rule_count += 1
+            missing = [key for key in REQUIRED_RULE_KEYS if key not in tags]
+            if missing:
+                raise ConversionError(
+                    f"rule {name!r} is missing required tags: {', '.join(missing)}"
+                )
+        if tags:
+            metric = metric.model_copy(
+                update={"custom_extensions": [extension(_structure(tags))]}
+            )
+        metrics.append(metric)
+
     if len(anchors) != 1:
         raise ConversionError(
             f"rules YAML must declare exactly one anchor dimension, found {len(anchors)}"
         )
     if rule_count == 0:
-        raise ConversionError("rules YAML must declare at least one rule_status dimension")
+        raise ConversionError(
+            "rules YAML must declare at least one rule_status dimension or measure"
+        )
 
     model = OSISemanticModel(
         name=model_name,
@@ -119,6 +168,7 @@ def convert_rules_to_ossie(rules_yaml: str, *, model_name: str) -> str:
                 fields=fields,
             )
         ],
+        metrics=metrics or None,
         custom_extensions=[
             extension(
                 {
