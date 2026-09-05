@@ -577,10 +577,11 @@ def query_rule_source_model(
         raise ConversionError(
             "rule measure source references unknown evidence dimensions: " + ", ".join(missing)
         )
-    missing_anchor = sorted(set(primary_key or []).difference(spec.dimensions))
+    group = [*spec.dimensions, *_structural_dimensions(source_model, selected=list(spec.dimensions))]
+    missing_anchor = sorted(set(primary_key or []).difference(group))
     if missing_anchor:
         raise ConversionError(
-            "rule measure source must select its primary key dimensions: "
+            "rule measure source must group by its primary key dimensions: "
             + ", ".join(missing_anchor)
         )
     known_measures = set(source_model.get_measures()) | set(
@@ -612,7 +613,6 @@ def query_rule_source_model(
                 f"rule source item {alias!r} references unknown evidence dimensions: "
                 + ", ".join(unknown)
             )
-    group = [*spec.dimensions, *_structural_dimensions(source_model, selected=list(spec.dimensions))]
     relation = _aggregate_relation(
         source_model, group=group, measures=measures, aggregates=aggregates
     )

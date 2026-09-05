@@ -166,3 +166,27 @@ def test_a_non_aggregate_select_item_is_rejected(evidence):
 
 def test_measure_names_are_reported_for_the_caller(evidence):
     assert rule_source_measure_names(_SOURCE) == ["min_iso_x_mm"]
+
+
+def test_the_primary_key_may_be_a_structural_entity_dimension(evidence):
+    """The rules engine anchors on subject_node_id while the authored query
+    groups by the natural key; an entity dimension riding along with the
+    group satisfies the anchor."""
+    source = """
+        SELECT sk_plan, MAX(dx_laterality) AS dx_laterality
+        FROM radonc.evidence.laterality_context
+        GROUP BY sk_plan
+    """
+    model = query_rule_source_model(evidence, source=source, primary_key=["evaluation_key"])
+
+    assert _rows(model, ["sk_plan", "evaluation_key"])[0] == {"sk_plan": "p1", "evaluation_key": "k"}
+
+
+def test_a_primary_key_absent_from_the_group_is_rejected(evidence):
+    source = """
+        SELECT sk_plan, MAX(dx_laterality) AS dx_laterality
+        FROM radonc.evidence.laterality_context
+        GROUP BY sk_plan
+    """
+    with pytest.raises(ConversionError, match="primary key"):
+        query_rule_source_model(evidence, source=source, primary_key=["dx_laterality"])
