@@ -21,7 +21,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "apache-ossie"
-version = "0.2.0.dev0"
+version = "0.2.0.dev1"
 description = "Python types for the Apache Ossie semantic model specification"
 authors = [{ name = "Apache Software Foundation", email = "dev@ossie.apache.org" }]
 requires-python = ">=3.11"

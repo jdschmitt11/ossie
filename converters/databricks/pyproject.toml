@@ -21,7 +21,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "apache-ossie-databricks"
-version = "0.2.0.dev0"
+version = "0.2.0.dev1"
 description = "Databricks Unity Catalog Metric View <> Apache Ossie converter"
 requires-python = ">=3.11"
 classifiers = [
