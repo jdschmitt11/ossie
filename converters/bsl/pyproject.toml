@@ -28,7 +28,7 @@ dev = [
 
 [project]
 name = "apache-ossie-bsl"
-version = "0.2.0.dev1"
+version = "0.2.0.dev2"
 description = "Apache Ossie -> Boring Semantic Layer converter"
 authors = [{ name = "Apache Software Foundation", email = "dev@ossie.apache.org" }]
 requires-python = ">=3.11"
