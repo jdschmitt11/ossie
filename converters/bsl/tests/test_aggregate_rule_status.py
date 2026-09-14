@@ -163,6 +163,40 @@ def test_a_precomputed_aggregate_status_is_one_verdict_per_subject(con):
     }
 
 
+def test_aggregate_status_can_chain_after_an_aggregate_rule_source(con):
+    rules_yaml = _PRECOMPUTED_RULES_YAML.replace(
+        "source: radonc.evidence.document_physics",
+        """source: |-
+  SELECT
+    sk_plan_document,
+    MAX(physicist_initials) AS physicist_initials,
+    MAX(in_window) AS in_window
+  FROM radonc.evidence.document_physics
+  GROUP BY sk_plan_document""",
+    )
+
+    rows = _by_document(_rules(con, rules_yaml), ["physics_assessment_in_window"])
+
+    assert rows == {
+        "doc-pass": {"physics_assessment_in_window": "PASS"},
+        "doc-fail": {"physics_assessment_in_window": "FAIL"},
+        "doc-none": {"physics_assessment_in_window": "NOT_APPLICABLE"},
+    }
+
+
+def test_aggregate_status_preserves_its_applies_when_predicate(con):
+    rules_yaml = _PRECOMPUTED_RULES_YAML.replace(
+        "      - rule_id:MS-015",
+        "      - rule_id:MS-015\n"
+        "      - rule_applies_when:MAX(source.in_window) IS NOT NULL",
+    )
+
+    rows = _by_document(_rules(con, rules_yaml), ["physics_assessment_in_window"])
+
+    assert rows["doc-pass"]["physics_assessment_in_window"] == "PASS"
+    assert rows["doc-none"]["physics_assessment_in_window"] == "NOT_APPLICABLE"
+
+
 def test_subject_columns_and_sibling_measures_ride_along_aggregated(con):
     rows = _by_document(
         _rules(con, _PRECOMPUTED_RULES_YAML), ["physicist_initials", "assessments"]

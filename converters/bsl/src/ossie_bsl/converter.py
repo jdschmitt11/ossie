@@ -54,6 +54,10 @@ CHAIN_ALIAS = "rule_input"
 #: references are rebound to it for the same duplicate-CTE reason.
 AGGREGATE_ALIAS = "rule_aggregate_input"
 
+#: A second aggregation can follow an authored aggregate rule source when rule
+#: statuses are measures. It needs its own alias so nested Ibis CTEs remain unique.
+STATUS_AGGREGATE_ALIAS = "rule_status_aggregate_input"
+
 #: Ibis transpiles the projection from this dialect. Authored expressions use
 #: ``TRY_CAST``, which is not ANSI SQL.
 SQL_DIALECT = "databricks"
@@ -543,6 +547,7 @@ def _aggregate_relation(
     group: list[str],
     measures: list[str],
     aggregates: list[tuple[str, str]],
+    aggregate_alias: str = AGGREGATE_ALIAS,
 ) -> Any:
     """One row per ``group``: BSL measures joined with raw aggregate items."""
     relation = None
@@ -551,8 +556,8 @@ def _aggregate_relation(
     if aggregates:
         selections = [*(_quoted(name) for name in group)]
         selections.extend(f"{sql} AS {_quoted(alias)}" for alias, sql in aggregates)
-        raw = _dimension_relation(source_model).alias(AGGREGATE_ALIAS).sql(
-            f"SELECT {', '.join(selections)} FROM {AGGREGATE_ALIAS} "
+        raw = _dimension_relation(source_model).alias(aggregate_alias).sql(
+            f"SELECT {', '.join(selections)} FROM {aggregate_alias} "
             f"GROUP BY {', '.join(_quoted(name) for name in group)}",
             dialect=SQL_DIALECT,
         )
@@ -668,7 +673,9 @@ def _subject_columns(payload: Mapping[str, Any]) -> list[str]:
     return [str(column).strip() for column in raw if str(column).strip()]
 
 
-def _bound_metric_sql(metric: Any, *, dataset: OSIDataset) -> str:
+def _bound_metric_sql(
+    metric: Any, *, dataset: OSIDataset, aggregate_alias: str = AGGREGATE_ALIAS
+) -> str:
     """Render a metric expression against the ``source`` alias."""
     try:
         parsed = parse_one(_pick_expression(metric), read=SQL_DIALECT)
@@ -682,7 +689,33 @@ def _bound_metric_sql(metric: Any, *, dataset: OSIDataset) -> str:
             raise ConversionError(
                 f"metric {metric.name!r} references unknown dataset {node.table!r}"
             )
-        return exp.column(node.name, table=AGGREGATE_ALIAS)
+        return exp.column(node.name, table=aggregate_alias)
+
+    return parsed.transform(bind).sql(dialect=SQL_DIALECT)
+
+
+def _bound_metric_applies_when_sql(
+    metric: Any, *, dataset: OSIDataset, aggregate_alias: str
+) -> str | None:
+    expression = _rule_applies_when(metric)
+    if expression is None:
+        return None
+    try:
+        parsed = parse_one(expression, read=SQL_DIALECT)
+    except ParseError as exc:
+        raise ConversionError(
+            f"cannot parse rule_applies_when for metric {metric.name!r}"
+        ) from exc
+
+    def bind(node: exp.Expression) -> exp.Expression:
+        if not isinstance(node, exp.Column):
+            return node
+        if node.table and node.table not in {SOURCE_ALIAS, dataset.name}:
+            raise ConversionError(
+                f"metric {metric.name!r} rule_applies_when references unknown "
+                f"dataset {node.table!r}"
+            )
+        return exp.column(node.name, table=aggregate_alias)
 
     return parsed.transform(bind).sql(dialect=SQL_DIALECT)
 
@@ -725,11 +758,38 @@ def _aggregate_status_model(
                     f"metric {metric.name!r} names unknown subject column {column!r}"
                 )
             carried.append(column)
-    aggregates.extend((column, f"MAX({AGGREGATE_ALIAS}.{_quoted(column)})") for column in carried)
     aggregates.extend(
-        (metric.name, _bound_metric_sql(metric, dataset=dataset)) for metric in metrics
+        (column, f"MAX({STATUS_AGGREGATE_ALIAS}.{_quoted(column)})")
+        for column in carried
     )
-    relation = _aggregate_relation(source_model, group=group, measures=[], aggregates=aggregates)
+    aggregates.extend(
+        (
+            metric.name,
+            _bound_metric_sql(
+                metric, dataset=dataset, aggregate_alias=STATUS_AGGREGATE_ALIAS
+            ),
+        )
+        for metric in metrics
+    )
+    aggregates.extend(
+        (applies_when_column(metric.name), expression)
+        for metric in metrics
+        if (
+            expression := _bound_metric_applies_when_sql(
+                metric,
+                dataset=dataset,
+                aggregate_alias=STATUS_AGGREGATE_ALIAS,
+            )
+        )
+        is not None
+    )
+    relation = _aggregate_relation(
+        source_model,
+        group=group,
+        measures=[],
+        aggregates=aggregates,
+        aggregate_alias=STATUS_AGGREGATE_ALIAS,
+    )
     return _rebind_semantic_relation(relation, source_model=source_model)
 
 
