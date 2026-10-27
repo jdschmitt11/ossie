@@ -57,3 +57,8 @@ Thumbs.db
 cli/dist/
 cli/ossie
 cli/.tool-versions
+**/.tmp_test/
+*.duckdb
+*.duckdb.wal
+*Zone.Identifier
+*.pkl
