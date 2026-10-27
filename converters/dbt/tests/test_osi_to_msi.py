@@ -109,6 +109,10 @@ class TestOSIToMSIFieldClassification:
         assert sm.entities[0].name == "order_id"
         assert sm.entities[0].type.value == "primary"
 
+        # expr same as name is stored as none.
+
+        assert sm.entities[0].expr is None
+
     def test_unique_key_field_becomes_unique_entity(self) -> None:
         doc = _osi_doc(
             datasets=[
@@ -206,19 +210,6 @@ class TestOSIToMSIFieldClassification:
 
         assert sm.entities[0].expr == "id"
 
-    def test_expr_same_as_name_is_stored_as_none(self) -> None:
-        doc = _osi_doc(
-            datasets=[
-                _osi_dataset(
-                    "orders",
-                    fields=[_osi_field("order_id")],
-                    primary_key=["order_id"],
-                )
-            ]
-        )
-        sm = OSIToMSIConverter().convert(doc).output.semantic_models[0]
-
-        assert sm.entities[0].expr is None
 
     def test_description_and_label_carried_over_to_dimension(self) -> None:
         doc = _osi_doc(

@@ -73,9 +73,7 @@ def test_self_plan_evidence_carries_source_and_every_field():
     assert dataset.source == "gold_plan_with_sk"
     assert [field.name for field in dataset.fields] == EXPECTED_FIELDS
 
-
-def test_the_detected_anchor_becomes_the_dataset_primary_key():
-    dataset = OSIDocument.model_validate(yaml.safe_load(_convert())).semantic_model[0].datasets[0]
+    # the detected anchor becomes the dataset primary key.
 
     assert dataset.primary_key == ["sk_plan"]
 
