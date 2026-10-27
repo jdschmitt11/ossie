@@ -105,14 +105,6 @@ def _roundtrip(obml: dict) -> dict:
 
 
 class TestModelSettings:
-    def test_settings_roundtrip(self):
-        result = _roundtrip(_OBML_FULL)
-        assert "settings" in result
-        settings = result["settings"]
-        assert settings["defaultNumericDataType"] == "NUMERIC(18,4)"
-        assert settings["defaultTimezone"] == "UTC"
-        assert settings["overrideDatabaseTimezone"] is True
-        assert settings["defaultDialect"] == "snowflake"
 
     def test_no_settings_no_key(self):
         obml = {**_OBML_FULL, "settings": None}
@@ -122,9 +114,6 @@ class TestModelSettings:
 
 
 class TestModelOwner:
-    def test_model_owner_roundtrip(self):
-        result = _roundtrip(_OBML_FULL)
-        assert result.get("owner") == "analytics-team"
 
     def test_no_owner_no_key(self):
         obml = {**_OBML_FULL}
@@ -133,28 +122,8 @@ class TestModelOwner:
         assert "owner" not in result
 
 
-class TestMeasureDataType:
-    def test_measure_data_type_roundtrip(self):
-        result = _roundtrip(_OBML_FULL)
-        assert result["measures"]["Revenue"].get("dataType") == "NUMERIC(18,2)"
-
-    def test_measure_owner_roundtrip(self):
-        result = _roundtrip(_OBML_FULL)
-        assert result["measures"]["Revenue"].get("owner") == "finance-team"
 
 
-class TestMetricDataType:
-    def test_metric_data_type_roundtrip(self):
-        result = _roundtrip(_OBML_FULL)
-        assert result["metrics"]["Revenue Growth"].get("dataType") == "NUMERIC(10,4)"
-
-    def test_metric_owner_roundtrip(self):
-        result = _roundtrip(_OBML_FULL)
-        assert result["metrics"]["Revenue Growth"].get("owner") == "finance-team"
-
-    def test_metric_format_roundtrip(self):
-        result = _roundtrip(_OBML_FULL)
-        assert result["metrics"]["Revenue Growth"].get("format") == "#,##0.00%"
 
 
 class TestRefreshPolicy:
@@ -213,78 +182,12 @@ class TestRefreshPolicy:
         assert rt["mode"] == "heartbeat"
         assert rt["maxStaleness"] == "5m"
 
-    def test_no_refresh_no_key(self):
-        result = _roundtrip(_OBML_FULL)
-        assert "refresh" not in result["dataObjects"]["Orders"]
 
 
-class TestColumnProperties:
-    """Column properties roundtrip.
-
-    Note: OSI uses column *code* as field name, so after roundtrip the OBML
-    column keys become the physical codes (AMOUNT, ORDER_ID) rather than
-    the original display names.
-    """
-
-    def test_sql_type_roundtrip(self):
-        result = _roundtrip(_OBML_FULL)
-        amount = result["dataObjects"]["Orders"]["columns"]["AMOUNT"]
-        assert amount.get("sqlType") == "NUMERIC"
-
-    def test_sql_precision_roundtrip(self):
-        result = _roundtrip(_OBML_FULL)
-        amount = result["dataObjects"]["Orders"]["columns"]["AMOUNT"]
-        assert amount.get("sqlPrecision") == 18
-
-    def test_sql_scale_roundtrip(self):
-        result = _roundtrip(_OBML_FULL)
-        amount = result["dataObjects"]["Orders"]["columns"]["AMOUNT"]
-        assert amount.get("sqlScale") == 4
-
-    def test_num_class_roundtrip(self):
-        result = _roundtrip(_OBML_FULL)
-        amount = result["dataObjects"]["Orders"]["columns"]["AMOUNT"]
-        assert amount.get("numClass") == "decimal"
-
-    def test_column_owner_roundtrip(self):
-        result = _roundtrip(_OBML_FULL)
-        order_id = result["dataObjects"]["Orders"]["columns"]["ORDER_ID"]
-        assert order_id.get("owner") == "data-eng"
-
-    def test_column_comment_roundtrip(self):
-        result = _roundtrip(_OBML_FULL)
-        order_id = result["dataObjects"]["Orders"]["columns"]["ORDER_ID"]
-        assert order_id.get("comment") == "Primary key"
 
 
-class TestDataObjectProperties:
-    def test_data_object_owner_roundtrip(self):
-        result = _roundtrip(_OBML_FULL)
-        assert result["dataObjects"]["Orders"].get("owner") == "data-eng"
-
-    def test_data_object_comment_roundtrip(self):
-        result = _roundtrip(_OBML_FULL)
-        assert result["dataObjects"]["Orders"].get("comment") == "Main orders fact table"
 
 
-class TestDimensionProperties:
-    """Dimension properties roundtrip.
-
-    Note: OSI uses column *code* as the field name, so after roundtrip the
-    dimension key becomes the physical code (ORDER_DATE).
-    """
-
-    def test_dimension_result_type_roundtrip(self):
-        result = _roundtrip(_OBML_FULL)
-        assert result["dimensions"]["ORDER_DATE"].get("resultType") == "date"
-
-    def test_dimension_description_roundtrip(self):
-        result = _roundtrip(_OBML_FULL)
-        assert result["dimensions"]["ORDER_DATE"].get("description") == "Order date dimension"
-
-    def test_dimension_owner_roundtrip(self):
-        result = _roundtrip(_OBML_FULL)
-        assert result["dimensions"]["ORDER_DATE"].get("owner") == "analytics"
 
 
 class TestCumulativeMetricDataType:
@@ -405,3 +308,38 @@ class TestCountSynthesisKnobs:
         assert "exposeCounts" not in result
         assert "countLabelPattern" not in result
         assert "countable" not in result["dataObjects"]["Sales"]
+
+
+def test_full_model_properties_survive_roundtrip() -> None:
+    """A single full-model roundtrip preserves every declared property and absence assertion."""
+    result = _roundtrip(_OBML_FULL)
+    assert 'settings' in result
+    settings = result['settings']
+    assert settings['defaultNumericDataType'] == 'NUMERIC(18,4)'
+    assert settings['defaultTimezone'] == 'UTC'
+    assert settings['overrideDatabaseTimezone'] is True
+    assert settings['defaultDialect'] == 'snowflake'
+    assert result.get('owner') == 'analytics-team'
+    assert result['measures']['Revenue'].get('dataType') == 'NUMERIC(18,2)'
+    assert result['measures']['Revenue'].get('owner') == 'finance-team'
+    assert result['metrics']['Revenue Growth'].get('dataType') == 'NUMERIC(10,4)'
+    assert result['metrics']['Revenue Growth'].get('owner') == 'finance-team'
+    assert result['metrics']['Revenue Growth'].get('format') == '#,##0.00%'
+    assert 'refresh' not in result['dataObjects']['Orders']
+    amount = result['dataObjects']['Orders']['columns']['AMOUNT']
+    assert amount.get('sqlType') == 'NUMERIC'
+    amount = result['dataObjects']['Orders']['columns']['AMOUNT']
+    assert amount.get('sqlPrecision') == 18
+    amount = result['dataObjects']['Orders']['columns']['AMOUNT']
+    assert amount.get('sqlScale') == 4
+    amount = result['dataObjects']['Orders']['columns']['AMOUNT']
+    assert amount.get('numClass') == 'decimal'
+    order_id = result['dataObjects']['Orders']['columns']['ORDER_ID']
+    assert order_id.get('owner') == 'data-eng'
+    order_id = result['dataObjects']['Orders']['columns']['ORDER_ID']
+    assert order_id.get('comment') == 'Primary key'
+    assert result['dataObjects']['Orders'].get('owner') == 'data-eng'
+    assert result['dataObjects']['Orders'].get('comment') == 'Main orders fact table'
+    assert result['dimensions']['ORDER_DATE'].get('resultType') == 'date'
+    assert result['dimensions']['ORDER_DATE'].get('description') == 'Order date dimension'
+    assert result['dimensions']['ORDER_DATE'].get('owner') == 'analytics'
