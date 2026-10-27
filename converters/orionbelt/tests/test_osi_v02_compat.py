@@ -173,13 +173,13 @@ class TestEmittedVersion:
         assert osi["version"] == conv._OSI_VERSION
         assert osi["version"].startswith("0.2")
 
-    def test_no_root_dialects_or_vendors(self) -> None:
+        # no root dialects or vendors.
         # The published OSI core schema forbids root-level dialects/vendors
         # (root is additionalProperties:false). See OSI PR #148.
-        osi = conv.OBMLtoOSI(_OBML_WITH_PK_AND_LABEL).convert()
         assert "dialects" not in osi
         assert "vendors" not in osi
         assert set(osi.keys()) <= {"version", "semantic_model"}
+
 
     def test_dialect_tagged_per_expression(self) -> None:
         # Dialects live on each expression, the schema-valid home.

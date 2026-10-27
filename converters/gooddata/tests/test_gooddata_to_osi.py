@@ -149,13 +149,8 @@ def test_dataset_source(gooddata_tpcds_model: GdDeclarativeModel):
     store_sales = next(ds for ds in sm["datasets"] if ds["name"] == "store_sales")
     assert store_sales["source"] == "tpcds.public.store_sales"
 
-
-def test_primary_key_from_grain(gooddata_tpcds_model: GdDeclarativeModel):
-    """Verify primary_key is derived from grain attributes' source columns."""
-    result = gooddata_to_osi(gooddata_tpcds_model)
-    sm = result["semantic_model"][0]
-
-    store_sales = next(ds for ds in sm["datasets"] if ds["name"] == "store_sales")
+    # primary key from grain.
+    # Verify primary_key is derived from grain attributes' source columns.
     assert set(store_sales["primary_key"]) == {"ss_item_sk", "ss_ticket_number"}
 
 

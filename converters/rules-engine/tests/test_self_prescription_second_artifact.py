@@ -85,6 +85,9 @@ def test_rule_version_is_preserved():
     }
     assert extensions["RULES_ENGINE"]["rule_version"] == "1.0.0"
 
+    # a rule with no audience roles tag has none in the extension.
+    assert "rule_audience_roles" not in extensions["RULES_ENGINE"]
+
 
 def test_rule_audience_roles_is_split_into_a_list():
     dataset = OSIDocument.model_validate(yaml.safe_load(_rules_ossie())).semantic_model[0].datasets[0]
@@ -95,17 +98,6 @@ def test_rule_audience_roles_is_split_into_a_list():
         for ext in by_name["rx_physician_signed"].custom_extensions
     }
     assert extensions["RULES_ENGINE"]["rule_audience_roles"] == ["doctor", "physicist"]
-
-
-def test_a_rule_with_no_audience_roles_tag_has_none_in_the_extension():
-    dataset = OSIDocument.model_validate(yaml.safe_load(_rules_ossie())).semantic_model[0].datasets[0]
-    by_name = {field.name: field for field in dataset.fields}
-
-    extensions = {
-        ext.vendor_name: json.loads(ext.data)
-        for ext in by_name["total_dose_present"].custom_extensions
-    }
-    assert "rule_audience_roles" not in extensions["RULES_ENGINE"]
 
 
 def test_both_artifacts_still_convert_side_by_side():
