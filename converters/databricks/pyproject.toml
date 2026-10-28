@@ -49,4 +49,3 @@ packages = ["src/ossie_databricks"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
