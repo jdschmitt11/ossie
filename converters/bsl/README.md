@@ -26,10 +26,7 @@ an Ibis expression tree that materialises only on `.query(...).execute()`.
 ```python
 from ossie_bsl import convert_ossie_to_bsl
 
-evidence = convert_ossie_to_bsl(
-    evidence_ossie_yaml,
-    tables={"gold_plan_with_sk": con.table("gold_plan_with_sk")},
-)
+# evidence is an already-built BSL SemanticModel.
 predicates = convert_ossie_to_bsl(rules_ossie_yaml, source_model=evidence)
 ```
 
@@ -51,8 +48,7 @@ the qualifier Ossie expressions produced by the Rules Engine converter use.
 
 ## Chaining a model onto another model
 
-Passing `source_model=` projects over an existing `SemanticModel` instead of a
-physical table. The upstream model is aliased `rule_input` and re-aliased to
+The required `source_model=` projects over an existing `SemanticModel`. The upstream model is aliased `rule_input` and re-aliased to
 `source` inside the query:
 
 ```sql
@@ -80,5 +76,6 @@ model `description` is passed through to the `SemanticModel`.
 
 ## Scope
 
-One semantic model with one dataset. Relationships, metrics and multi-dataset
-models raise `ConversionError` rather than being dropped.
+One rule semantic model with one dataset, chained onto an existing BSL model.
+Relationships and multi-dataset models raise `ConversionError`. Physical table
+binding and evidence conversion belong to the upstream evidence builder.

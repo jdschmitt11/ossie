@@ -22,7 +22,7 @@ import pytest
 
 from ossie_bsl import convert_ossie_to_bsl
 
-from _util import prescription_evidence_ossie, prescription_rules_ossie
+from _util import native_model, prescription_rules_ossie
 
 # Mirrors the real gold_prescription_with_sk schema (patient_context_graph.duckdb).
 SCHEMA = """
@@ -70,21 +70,12 @@ def con():
 
 @pytest.fixture
 def evidence(con):
-    return convert_ossie_to_bsl(
-        prescription_evidence_ossie(),
-        tables={"gold_prescription_with_sk": con.table("gold_prescription_with_sk")},
+    table = con.table("gold_prescription_with_sk")
+    table = table.mutate(
+        status_label=ibis.cases((table.status == 5, "APPROVE"), else_="Unknown"),
+        staff_role_label=ibis.cases((table.staff_role == 1, "Physician"), else_="Unknown"),
     )
-
-
-def test_evidence_converts_and_evaluates(evidence):
-    rows = (
-        evidence.query(dimensions=["sk_prescription", "status_label", "staff_role_label"])
-        .execute()
-        .set_index("sk_prescription")
-        .to_dict("index")
-    )
-    assert rows[1]["status_label"] == "APPROVE"
-    assert rows[1]["staff_role_label"] == "Physician"
+    return native_model(table, entities=("sk_prescription",))
 
 
 def test_rules_chain_and_a_rule_id_that_differs_from_its_dimension_name(evidence):

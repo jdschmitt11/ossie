@@ -16,7 +16,6 @@
 # under the License.
 
 import ibis
-import pandas as pd
 import pytest
 from boring_semantic_layer import SemanticModel
 from boring_semantic_layer.ops import Dimension
@@ -24,7 +23,7 @@ from boring_semantic_layer.ops import Dimension
 from ossie_bsl import convert_ossie_to_bsl
 from ossie_bsl.internals import ConversionError
 
-from _util import evidence_ossie, rules_ossie
+from _util import native_model, rules_ossie
 
 # Every ``source.<column>`` the self-plan evidence artifact references.
 COLUMNS = (
@@ -83,59 +82,13 @@ def con():
 
 @pytest.fixture
 def evidence(con):
-    return convert_ossie_to_bsl(
-        evidence_ossie(), tables={"gold_plan_with_sk": con.table("gold_plan_with_sk")}
+    table = con.table("gold_plan_with_sk")
+    table = table.mutate(
+        total_dose=table.total_dose.cast("float64"),
+        number_of_fractions=table.number_of_fractions.cast("int64"),
+        tx_site_classified=table.tx_site,
     )
-
-
-def test_evidence_becomes_a_semantic_model(evidence):
-    assert isinstance(evidence, SemanticModel)
-    assert evidence.name == "self_plan_evidence"
-    assert evidence.description.startswith("display_name: Plan Evidence")
-
-
-def test_authored_sql_is_transpiled_and_evaluated(evidence):
-    rows = (
-        evidence.query(dimensions=["sk_plan", "total_dose", "dose_per_fraction_cgy"])
-        .execute()
-        .set_index("sk_plan")
-        .to_dict("index")
-    )
-
-    assert rows["plan-pass"] == {"total_dose": 6000.0, "dose_per_fraction_cgy": 200.0}
-    assert rows["plan-fail"]["total_dose"] == 0.0
-    # NULL from the CASE ELSE branch; pandas renders a null float as NaN.
-    assert pd.isna(rows["plan-fail"]["dose_per_fraction_cgy"])
-    assert pd.isna(rows["plan-pending"]["total_dose"])
-
-
-def test_the_primary_key_becomes_an_entity_dimension(evidence):
-    dimensions = evidence.get_dimensions()
-
-    assert dimensions["sk_plan"].is_entity is True
-    assert dimensions["total_dose"].is_entity is False
-
-
-def test_field_extensions_are_namespaced_in_dimension_metadata(evidence):
-    metadata = evidence.get_dimensions()["sk_plan"].metadata
-
-    assert metadata["ossie"]["field_extensions"] == {
-        "RULES_ENGINE": {
-            "_v": 1,
-            "anchor": True,
-            "node_type": "plan",
-            "evidence_version": "1.2.0",
-        }
-    }
-    assert evidence.get_dimensions()["total_dose"].metadata == {}
-
-
-def test_model_extensions_are_mirrored_onto_the_primary_key_dimension(evidence):
-    metadata = evidence.get_dimensions()["sk_plan"].metadata
-
-    assert metadata["ossie"]["model_extensions"]["RULES_ENGINE"]["evidence_id"] == (
-        "self.plan_evidence"
-    )
+    return native_model(table, entities=("sk_plan",))
 
 
 def test_rules_chain_onto_the_evidence_model(evidence):
@@ -231,22 +184,12 @@ def test_a_field_colliding_with_an_upstream_column_raises(evidence):
         convert_ossie_to_bsl(colliding, source_model=evidence)
 
 
-def test_requiring_exactly_one_model_and_dataset(con):
-    doubled = evidence_ossie().replace(
+def test_requiring_exactly_one_model_and_dataset(evidence):
+    doubled = rules_ossie().replace(
         "semantic_model:\n", "semantic_model:\n- name: extra\n  datasets: []\n"
     )
 
     with pytest.raises(ConversionError, match="exactly one semantic model"):
         convert_ossie_to_bsl(
-            doubled, tables={"gold_plan_with_sk": con.table("gold_plan_with_sk")}
+            doubled, source_model=evidence
         )
-
-
-def test_a_missing_table_binding_raises():
-    with pytest.raises(ConversionError, match="gold_plan_with_sk"):
-        convert_ossie_to_bsl(evidence_ossie(), tables={})
-
-
-def test_passing_neither_tables_nor_source_model_raises():
-    with pytest.raises(ConversionError, match="tables"):
-        convert_ossie_to_bsl(evidence_ossie())

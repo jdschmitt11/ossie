@@ -18,12 +18,10 @@
 """Rules Engine metric YAML -> Apache Ossie converter."""
 
 from ._common import VENDOR, ConversionError
-from .evidence import convert_evidence_to_ossie
 from .rules import convert_rules_to_ossie
 
 __all__ = [
     "VENDOR",
     "ConversionError",
-    "convert_evidence_to_ossie",
     "convert_rules_to_ossie",
 ]

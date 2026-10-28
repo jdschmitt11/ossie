@@ -17,20 +17,26 @@
 
 from pathlib import Path
 
+from boring_semantic_layer import to_semantic_table
+from boring_semantic_layer.ops import Dimension
+
 FIXTURES = Path(__file__).parent / "fixtures"
-
-
-def evidence_ossie() -> str:
-    return (FIXTURES / "self_plan_evidence.ossie.yaml").read_text()
 
 
 def rules_ossie() -> str:
     return (FIXTURES / "self_plan.rules.ossie.yaml").read_text()
 
 
-def prescription_evidence_ossie() -> str:
-    return (FIXTURES / "self_prescription_evidence.ossie.yaml").read_text()
-
-
 def prescription_rules_ossie() -> str:
     return (FIXTURES / "self_prescription.rules.ossie.yaml").read_text()
+
+
+def native_model(table, *, entities=()):
+    """Declare already-materialized evidence with native BSL dimensions."""
+    return to_semantic_table(table).with_dimensions(**{
+        name: Dimension(
+            expr=lambda source, _name=name: source[_name],
+            is_entity=name in entities,
+        )
+        for name in table.columns
+    })

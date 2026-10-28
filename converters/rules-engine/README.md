@@ -19,17 +19,12 @@ under the License.
 
 # Rules Engine &rarr; Apache Ossie converter
 
-Converts Rules Engine metric YAML — the authoring format used for *evidence*
-artifacts and *rule family* artifacts — into Apache Ossie semantic models.
+Converts Rules Engine rule-family metric YAML into Apache Ossie semantic models.
+Evidence is supplied separately as an existing BSL semantic model.
 
 ```python
-from ossie_rules_engine import convert_evidence_to_ossie, convert_rules_to_ossie
+from ossie_rules_engine import convert_rules_to_ossie
 
-evidence_ossie = convert_evidence_to_ossie(
-    evidence_yaml,
-    model_name="self_plan_evidence",
-    evidence_id="self.plan_evidence",
-)
 rules_ossie = convert_rules_to_ossie(rules_yaml, model_name="self_plan")
 ```
 

@@ -15,36 +15,15 @@
 # specific language governing permissions and limitations
 # under the License.
 
-"""Two production behaviours the single-source path must match.
-
-1. An evidence artifact's ``filter:`` applies on the single-table path, not only
-   on the joined one. self_activity_evidence filters out one department; the
-   rules engine evaluates only the surviving rows, so Ossie must too.
-2. A rule predicate that is not boolean-typed (an integer, or a CASE whose every
-   branch is NULL) is coerced the way DuckDB coerces ``(predicate) IS TRUE``:
-   non-zero is PASS, zero is FAIL, NULL is PENDING.
-"""
+"""Integer and all-null rule predicates retain their status semantics."""
 
 import ibis
 import pytest
 
 from ossie_bsl import convert_ossie_to_bsl, evaluate_rules
-from ossie_rules_engine import convert_evidence_to_ossie, convert_rules_to_ossie
+from ossie_rules_engine import convert_rules_to_ossie
 
-_EVIDENCE = """\
-version: '1.1'
-evidence_version: '1.0.0'
-source: gold_activity
-filter: source.department_name <> 'Excluded Dept'
-dimensions:
-  - name: activity_id
-    expr: source.sk_activity
-    tags: [rules_engine:anchor, node_type:activity, evidence_version:1.0.0]
-  - name: department_name
-    expr: source.department_name
-  - name: units
-    expr: source.units
-"""
+from _util import native_model
 
 _RULES = """\
 version: '1.1'
@@ -94,20 +73,13 @@ def con():
 
 
 def _statuses(con):
-    evidence = convert_ossie_to_bsl(
-        convert_evidence_to_ossie(_EVIDENCE, model_name="activity_evidence", evidence_id="self.activity"),
-        tables={"gold_activity": con.table("gold_activity")},
-    )
+    table = con.table("gold_activity").rename(activity_id="sk_activity")
+    table = table.filter(table.department_name != "Excluded Dept")
+    evidence = native_model(table, entities=("activity_id",))
     rules = evaluate_rules(
         convert_ossie_to_bsl(convert_rules_to_ossie(_RULES, model_name="activity"), source_model=evidence)
     )
     return rules.query(dimensions=["activity_id", "has_units", "never_decided"]).execute().set_index("activity_id")
-
-
-def test_the_evidence_filter_applies_on_the_single_table_path(con):
-    statuses = _statuses(con)
-
-    assert sorted(statuses.index) == [1, 2, 3]
 
 
 def test_an_integer_predicate_is_coerced_like_is_true(con):
