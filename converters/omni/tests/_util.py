@@ -21,7 +21,7 @@ import copy
 import json
 import pathlib
 
-from osi_omni._common import load_yaml  # src is on sys.path via conftest.py
+from osi_omni._common import load_yaml
 
 FIXTURES = pathlib.Path(__file__).resolve().parent / "fixtures"
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
