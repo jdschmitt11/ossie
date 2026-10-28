@@ -31,21 +31,9 @@ from boring_semantic_layer import SemanticModel
 
 from ossie_bsl import convert_ossie_to_bsl, evaluate_rules
 from ossie_bsl.internals import ConversionError
-from ossie_rules_engine import convert_evidence_to_ossie, convert_rules_to_ossie
+from ossie_rules_engine import convert_rules_to_ossie
 
-_EVIDENCE_YAML = """\
-version: '1.1'
-evidence_version: '1.0.0'
-source: gold_physics
-dimensions:
-  - name: sk_plan_document
-    expr: source.sk_plan_document
-    tags: [rules_engine:anchor, node_type:plan_document, evidence_version:1.0.0]
-  - name: physicist_initials
-    expr: source.physicist_initials
-  - name: in_window
-    expr: source.in_window
-"""
+from _util import native_model
 
 _RULES_HEADER = """\
 version: '1.1'
@@ -126,13 +114,8 @@ def con():
     return connection
 
 
-def _evidence(con) -> SemanticModel:
-    return convert_ossie_to_bsl(
-        convert_evidence_to_ossie(
-            _EVIDENCE_YAML, model_name="physics_evidence", evidence_id="document.physics"
-        ),
-        tables={"gold_physics": con.table("gold_physics")},
-    )
+def _evidence(con):
+    return native_model(con.table("gold_physics"), entities=("sk_plan_document",))
 
 
 def _rules(con, rules_yaml: str) -> SemanticModel:

@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import json
 import operator
-import re
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping
 
@@ -34,7 +33,6 @@ from ossie import (
     OSIDialect,
     OSIDocument,
     OSIField,
-    OSIRelationship,
     OSISemanticModel,
 )
 from sqlglot import exp, parse_one
@@ -72,7 +70,6 @@ NAMESPACE = "ossie"
 APPLIES_WHEN_PREFIX = "__ossie_applies_when__"
 
 _RULES_ENGINE_VENDOR = "RULES_ENGINE"
-_DATABRICKS_VENDOR = "DATABRICKS"
 
 _DIALECT_PREFERENCE = (OSIDialect.DATABRICKS, OSIDialect.ANSI_SQL)
 
@@ -101,202 +98,6 @@ def _single_dataset(model: OSISemanticModel) -> OSIDataset:
     return dataset
 
 
-def _raw_column_name(dataset_index: int, column: str) -> str:
-    return f"__ossie_raw__{dataset_index}__{column}"
-
-
-def _raw_projection_sql(table: Any, *, alias: str, dataset_index: int) -> str:
-    columns = ", ".join(
-        f"{column} AS {_raw_column_name(dataset_index, column)}" for column in table.columns
-    )
-    return f"SELECT {columns} FROM {alias}"
-
-
-def _joined_expression(
-    expression: str, *, dataset_name: str, alias_indexes: dict[str, int]
-) -> str:
-    """Bind an OSSIE expression to the raw columns retained by the Ibis joins."""
-    expression = _bind_deep_join_paths(expression, alias_indexes=alias_indexes)
-    try:
-        parsed = parse_one(expression, read=SQL_DIALECT)
-    except ParseError as exc:
-        raise ConversionError(f"cannot parse joined expression {expression!r}") from exc
-
-    def bind_column(node: exp.Expression) -> exp.Expression:
-        if not isinstance(node, exp.Column) or len(node.parts) < 2:
-            return node
-        qualifier = ".".join(part.name for part in node.parts[:-1])
-        target = alias_indexes.get(qualifier)
-        if target is None:
-            return node
-        return exp.column(_raw_column_name(target, node.name))
-
-    authored_as_bare_column = isinstance(parsed, exp.Column) and len(parsed.parts) == 1
-    rewritten = parsed.transform(bind_column)
-    if authored_as_bare_column:
-        if parsed.name.startswith("__ossie_raw__"):
-            return parsed.name
-        return _raw_column_name(alias_indexes[dataset_name], parsed.name)
-    return rewritten.sql(dialect=SQL_DIALECT)
-
-
-def _bind_deep_join_paths(expression: str, *, alias_indexes: Mapping[str, int]) -> str:
-    """Bind declared nested join paths before SQLGlot parses them.
-
-    Databricks metric views allow arbitrarily deep relationship paths, while a
-    SQL column has at most three qualifiers in SQLGlot's AST. Replace only the
-    declared path-plus-column tokens outside quoted literals; ordinary SQL is
-    still parsed and rewritten by :func:`_joined_expression` below.
-    """
-    nested_paths = {
-        path: index for path, index in alias_indexes.items() if "." in path
-    }
-    if not nested_paths:
-        return expression
-
-    path_pattern = "|".join(
-        re.escape(path) for path in sorted(nested_paths, key=len, reverse=True)
-    )
-    reference = re.compile(
-        rf"(?<![A-Za-z0-9_])(?P<path>{path_pattern})\.(?P<column>[A-Za-z_][A-Za-z0-9_]*)"
-    )
-    quoted = re.compile(r"('(?:''|[^'])*'|\"(?:\"\"|[^\"])*\")")
-
-    def replace(segment: str) -> str:
-        return reference.sub(
-            lambda match: _raw_column_name(
-                nested_paths[match.group("path")], match.group("column")
-            ),
-            segment,
-        )
-
-    return "".join(
-        part if quoted.fullmatch(part) else replace(part)
-        for part in quoted.split(expression)
-    )
-
-
-def _databricks_filter(model: OSISemanticModel) -> str | None:
-    payload = _extensions(model).get(_DATABRICKS_VENDOR)
-    if payload is None:
-        return None
-    if not isinstance(payload, dict) or "filter" not in payload:
-        return None
-    filter_sql = payload["filter"]
-    if not isinstance(filter_sql, str) or not filter_sql.strip():
-        raise ConversionError("DATABRICKS filter must be a non-empty SQL string")
-    return filter_sql
-
-
-def _joined_projection(
-    model: OSISemanticModel, tables: Mapping[str, Any]
-) -> tuple[OSIDataset, Any, dict[str, int]]:
-    """Build the declared many-to-one relationship tree with Ibis left joins."""
-    datasets = model.datasets or []
-    if not datasets:
-        raise ConversionError("semantic model declares no datasets")
-    root = datasets[0]
-    by_name = {dataset.name: dataset for dataset in datasets}
-    if len(by_name) != len(datasets):
-        raise ConversionError("semantic model declares duplicate dataset names")
-
-    for relationship in model.relationships or []:
-        if relationship.from_dataset not in by_name or relationship.to not in by_name:
-            raise ConversionError(f"relationship {relationship.name!r} references an unknown dataset")
-        if len(relationship.from_columns) != len(relationship.to_columns):
-            raise ConversionError(f"relationship {relationship.name!r} has mismatched join columns")
-    projections = {}
-    dataset_indexes = {dataset.name: index for index, dataset in enumerate(datasets)}
-    for dataset in datasets:
-        if dataset.source not in tables:
-            raise ConversionError(f"no table bound for source {dataset.source!r}")
-        input_alias = f"__ossie_input__{dataset_indexes[dataset.name]}"
-        table = tables[dataset.source].alias(input_alias)
-        projections[dataset.name] = table.sql(
-            _raw_projection_sql(table, alias=input_alias, dataset_index=dataset_indexes[dataset.name]),
-            dialect=SQL_DIALECT,
-        ).alias(f"__ossie_dataset__{dataset.name}")
-
-    joined = projections[root.name]
-    joined_names = {root.name}
-    alias_indexes = {"source": dataset_indexes[root.name], root.name: dataset_indexes[root.name]}
-    dataset_paths = {root.name: ""}
-    pending = list(model.relationships or [])
-    while pending:
-        for relationship in pending[:]:
-            if relationship.from_dataset not in joined_names:
-                continue
-            if relationship.to in joined_names:
-                raise ConversionError(
-                    f"relationship {relationship.name!r} does not form a tree from {root.name!r}"
-                )
-            child = projections[relationship.to]
-            join_filter = _relationship_join_filter(relationship)
-            if join_filter is not None:
-                child_alias = f"__ossie_filtered__{relationship.to}"
-                filter_sql = _joined_expression(
-                    join_filter,
-                    dataset_name=relationship.to,
-                    alias_indexes={
-                        relationship.to: dataset_indexes[relationship.to],
-                    },
-                )
-                child = child.alias(child_alias).sql(
-                    f"SELECT * FROM {child_alias} WHERE {filter_sql}",
-                    dialect=SQL_DIALECT,
-                )
-            predicates = [
-                joined[_raw_column_name(dataset_indexes[relationship.from_dataset], from_column)]
-                == child[_raw_column_name(dataset_indexes[relationship.to], to_column)]
-                for from_column, to_column in zip(
-                    relationship.from_columns, relationship.to_columns, strict=True
-                )
-            ]
-            joined = joined.left_join(child, predicates)
-            joined_names.add(relationship.to)
-            parent_path = dataset_paths[relationship.from_dataset]
-            path = f"{parent_path}.{relationship.to}".lstrip(".")
-            dataset_paths[relationship.to] = path
-            alias_indexes[path] = dataset_indexes[relationship.to]
-            alias_indexes.setdefault(relationship.to, dataset_indexes[relationship.to])
-            pending.remove(relationship)
-            break
-        else:
-            unresolved = ", ".join(relationship.name or "<unnamed>" for relationship in pending)
-            raise ConversionError(
-                f"relationships must form a directed tree from {root.name!r}: {unresolved}"
-            )
-
-    fields = [field for dataset in datasets for field in (dataset.fields or [])]
-    field_names = [field.name for field in fields]
-    if len(set(field_names)) != len(field_names):
-        raise ConversionError("joined datasets declare duplicate field names")
-    joined_alias = "__ossie_joined"
-    selections = [
-        f"{_joined_expression(_pick_expression(field), dataset_name=dataset.name, alias_indexes=alias_indexes)} AS {field.name}"
-        for dataset in datasets
-        for field in (dataset.fields or [])
-    ]
-    selections.extend(
-        f"{_metric_argument_expression(metric, dataset=root, alias_indexes=alias_indexes)} "
-        f"AS {_metric_argument_name(metric.name)}"
-        for metric in (model.metrics or [])
-        if _base_metric(metric) is not None
-    )
-    filter_sql = _databricks_filter(model)
-    where = (
-        ""
-        if filter_sql is None
-        else " WHERE " + _joined_expression(
-            filter_sql, dataset_name=root.name, alias_indexes=alias_indexes
-        )
-    )
-    projected = joined.alias(joined_alias).sql(
-        f"SELECT {', '.join(selections)} FROM {joined_alias}{where}", dialect=SQL_DIALECT
-    )
-    return root, projected, alias_indexes
-
-
 def _pick_expression(field: Any) -> str:
     """Select the best available dialect, preferring DATABRICKS over ANSI_SQL."""
     by_dialect = {entry.dialect: entry.expression for entry in field.expression.dialects}
@@ -310,30 +111,12 @@ def _pick_expression(field: Any) -> str:
 
 
 def _extensions(
-    obj: OSIDataset | OSIField | OSIRelationship | OSISemanticModel,
+    obj: OSIDataset | OSIField | OSISemanticModel,
 ) -> dict[str, Any]:
     return {
         extension.vendor_name: json.loads(extension.data)
         for extension in (obj.custom_extensions or [])
     }
-
-
-def _relationship_join_filter(relationship: OSIRelationship) -> str | None:
-    payload = _extensions(relationship).get(_RULES_ENGINE_VENDOR)
-    if payload is None:
-        return None
-    if not isinstance(payload, dict):
-        raise ConversionError(
-            f"relationship {relationship.name!r}: RULES_ENGINE metadata must be an object"
-        )
-    join_filter = payload.get("join_filter")
-    if join_filter is None:
-        return None
-    if not isinstance(join_filter, str) or not join_filter.strip():
-        raise ConversionError(
-            f"relationship {relationship.name!r}: join_filter must be a non-empty SQL string"
-        )
-    return join_filter
 
 
 def applies_when_column(rule_name: str) -> str:
@@ -367,7 +150,6 @@ def _projection_sql(
     dataset: OSIDataset,
     *,
     alias: str,
-    passthrough: bool,
     fields: list[OSIField] | None = None,
     metrics: list[Any] | None = None,
 ) -> str:
@@ -379,17 +161,14 @@ def _projection_sql(
         if _rule_applies_when(field) is not None
     )
     selections.extend(
-        f"{_metric_argument_expression(metric, dataset=dataset, alias_indexes=None)} "
+        f"{_metric_argument_expression(metric, dataset=dataset)} "
         f"AS {_metric_argument_name(metric.name)}"
         for metric in (metrics or [])
         if _base_metric(metric) is not None
     )
-    if passthrough:
-        selections.insert(0, f"{SOURCE_ALIAS}.*")
+    selections.insert(0, f"{SOURCE_ALIAS}.*")
     columns = ", ".join(selections)
-    if passthrough:
-        return f"SELECT {columns} FROM {alias} AS {SOURCE_ALIAS}"
-    return f"SELECT {columns} FROM {SOURCE_ALIAS}"
+    return f"SELECT {columns} FROM {alias} AS {SOURCE_ALIAS}"
 
 
 def _source_passthrough_field(field: OSIField) -> bool:
@@ -793,7 +572,6 @@ def _aggregate_status_model(
     return _rebind_semantic_relation(relation, source_model=source_model)
 
 
-
 def rebind_rule_source_model(source_model: SemanticModel) -> SemanticModel:
     """Expose declared evidence dimensions as a lazy rule-source relation."""
     dimensions = source_model.get_dimensions()
@@ -876,18 +654,11 @@ def _metric_argument_expression(
     metric: Any,
     *,
     dataset: OSIDataset,
-    alias_indexes: Mapping[str, int] | None,
 ) -> str:
     base = _base_metric(metric)
     if base is None:
         raise ConversionError(f"metric {metric.name!r} is not a base aggregate")
     argument = base[1]
-    if alias_indexes is not None:
-        return _joined_expression(
-            argument.sql(dialect=SQL_DIALECT),
-            dataset_name=dataset.name,
-            alias_indexes=dict(alias_indexes),
-        )
 
     def bind_dataset(node: exp.Expression) -> exp.Expression:
         if not isinstance(node, exp.Column):
@@ -975,33 +746,23 @@ def _calculated_measure(metric: Any, *, measure_names: set[str]) -> CalcMeasure:
 def convert_ossie_to_bsl(
     ossie_yaml: str,
     *,
-    tables: Mapping[str, Any] | None = None,
-    source_model: SemanticModel | None = None,
+    source_model: SemanticModel,
     measure_columns: Iterable[str] = (),
 ) -> SemanticModel:
-    """Build a lazy BSL ``SemanticModel`` from an Ossie YAML document.
+    """Chain an Ossie rule document onto an existing lazy semantic model.
 
-    Pass ``tables`` to project over a physical table, or ``source_model`` to
-    chain onto an existing model. Nothing is executed; the result materialises
-    only on ``.query(...).execute()``. ``measure_columns`` lists columns of
-    ``source_model`` that an aggregate rule source may read through
-    ``MEASURE(name)`` (see :func:`query_rule_source_model`).
+    Nothing executes until the model is queried. ``measure_columns`` declares
+    materialized evidence columns available to aggregate rule ``MEASURE`` reads.
     """
-    if (tables is None) == (source_model is None):
-        raise ConversionError("pass exactly one of tables= or source_model=")
+    if not isinstance(source_model, SemanticModel):
+        raise ConversionError("source_model must be a SemanticModel")
 
     document = OSIDocument.model_validate(yaml.safe_load(ossie_yaml))
     model = _single_model(document)
     if model.relationships:
-        if source_model is not None:
-            raise ConversionError("relationships cannot be chained onto source_model")
-        dataset, projected, metric_aliases = _joined_projection(model, tables)
-        all_fields = [field for item in model.datasets or [] for field in (item.fields or [])]
-    else:
-        dataset = _single_dataset(model)
-        metric_aliases = None
-        all_fields = list(dataset.fields)
-        projected = None
+        raise ConversionError("relationships cannot be chained onto source_model")
+    dataset = _single_dataset(model)
+    all_fields = list(dataset.fields)
     applies_when_columns = set(_applies_when_columns(dataset).values())
     field_names = {field.name for field in all_fields}
     internal_collisions = sorted(applies_when_columns & field_names)
@@ -1017,101 +778,78 @@ def convert_ossie_to_bsl(
     status_metrics = [
         metric for metric in metrics if _rules_engine_payload(metric).get("semantic_role") == "rule_status"
     ]
-    if status_metrics and source_model is None:
-        raise ConversionError("measure-authored rule statuses require source_model=")
-    if model.relationships:
-        sql = None
-    elif source_model is not None:
-        if dataset.source.lstrip().upper().startswith("SELECT"):
-            source_model = query_rule_source_model(
-                source_model,
-                source=dataset.source,
-                primary_key=_anchor_source_columns(dataset),
-                measure_columns=measure_columns,
-            )
-        if status_metrics:
-            status_fields = sorted(
-                field.name
-                for field in dataset.fields
-                if _rules_engine_payload(field).get("semantic_role") == "rule_status"
-            )
-            if status_fields:
-                raise ConversionError(
-                    "a rule family cannot mix row-grain status fields with measure-authored "
-                    "statuses: " + ", ".join(status_fields)
-                )
-            source_model = _aggregate_status_model(source_model, dataset=dataset, metrics=metrics)
-            metric_dimensions = {
-                metric.name: Dimension(
-                    expr=_reference(metric.name),
-                    description=metric.description,
-                    metadata=(
-                        {NAMESPACE: {"field_extensions": _extensions(metric)}}
-                        if _extensions(metric)
-                        else {}
-                    ),
-                )
-                for metric in metrics
-            }
-            metrics = []
-        base = _chain_base(source_model).alias(CHAIN_ALIAS)
-        upstream_dimensions = {
-            name: dimension
-            for name, dimension in source_model.get_dimensions().items()
-            if name not in metric_dimensions
-        }
-        upstream_names = set(source_model.table.columns) | set(upstream_dimensions)
-        reused_fields = {
+    if dataset.source.lstrip().upper().startswith("SELECT"):
+        source_model = query_rule_source_model(
+            source_model,
+            source=dataset.source,
+            primary_key=_anchor_source_columns(dataset),
+            measure_columns=measure_columns,
+        )
+    if status_metrics:
+        status_fields = sorted(
             field.name
             for field in dataset.fields
-            if field.name in upstream_names and _source_passthrough_field(field)
+            if _rules_engine_payload(field).get("semantic_role") == "rule_status"
+        )
+        if status_fields:
+            raise ConversionError(
+                "a rule family cannot mix row-grain status fields with measure-authored "
+                "statuses: " + ", ".join(status_fields)
+            )
+        source_model = _aggregate_status_model(source_model, dataset=dataset, metrics=metrics)
+        metric_dimensions = {
+            metric.name: Dimension(
+                expr=_reference(metric.name),
+                description=metric.description,
+                metadata=(
+                    {NAMESPACE: {"field_extensions": _extensions(metric)}}
+                    if _extensions(metric)
+                    else {}
+                ),
+            )
+            for metric in metrics
         }
-        collisions = sorted(
-            field.name
-            for field in dataset.fields
-            if field.name in upstream_names and field.name not in reused_fields
+        metrics = []
+    base = _chain_base(source_model).alias(CHAIN_ALIAS)
+    upstream_dimensions = {
+        name: dimension
+        for name, dimension in source_model.get_dimensions().items()
+        if name not in metric_dimensions
+    }
+    upstream_names = set(source_model.table.columns) | set(upstream_dimensions)
+    reused_fields = {
+        field.name
+        for field in dataset.fields
+        if field.name in upstream_names and _source_passthrough_field(field)
+    }
+    collisions = sorted(
+        field.name
+        for field in dataset.fields
+        if field.name in upstream_names and field.name not in reused_fields
+    )
+    if collisions:
+        raise ConversionError(
+            "fields would shadow upstream columns: " + ", ".join(collisions)
         )
-        if collisions:
-            raise ConversionError(
-                "fields would shadow upstream columns: " + ", ".join(collisions)
-            )
-        internal_collisions = sorted(applies_when_columns & upstream_names)
-        if internal_collisions:
-            raise ConversionError(
-                "rule_applies_when columns would shadow upstream columns: "
-                + ", ".join(internal_collisions)
-            )
-        sql = _projection_sql(
-            dataset,
-            alias=CHAIN_ALIAS,
-            passthrough=True,
-            fields=[field for field in dataset.fields if field.name not in reused_fields],
-            metrics=metrics,
+    internal_collisions = sorted(applies_when_columns & upstream_names)
+    if internal_collisions:
+        raise ConversionError(
+            "rule_applies_when columns would shadow upstream columns: "
+            + ", ".join(internal_collisions)
         )
-    else:
-        if dataset.source not in tables:
-            raise ConversionError(f"no table bound for source {dataset.source!r}")
-        base = tables[dataset.source].alias(SOURCE_ALIAS)
-        sql = _projection_sql(
-            dataset,
-            alias=SOURCE_ALIAS,
-            passthrough=False,
-            metrics=metrics,
-        )
-        # The artifact filter applies here exactly as on the joined path: the
-        # rules engine evaluates only surviving rows, so the projection must too.
-        filter_sql = _databricks_filter(model)
-        if filter_sql is not None:
-            sql = f"{sql} WHERE {filter_sql}"
-
-    if not model.relationships:
-        projected = base.sql(sql, dialect=SQL_DIALECT)
+    sql = _projection_sql(
+        dataset,
+        alias=CHAIN_ALIAS,
+        fields=[field for field in dataset.fields if field.name not in reused_fields],
+        metrics=metrics,
+    )
+    projected = base.sql(sql, dialect=SQL_DIALECT)
 
     primary_key = set(dataset.primary_key or [])
     model_extensions = _extensions(model)
     dimensions = {}
     for field in all_fields:
-        if source_model is not None and field.name in upstream_dimensions and _source_passthrough_field(field):
+        if field.name in upstream_dimensions and _source_passthrough_field(field):
             continue
         metadata: dict[str, Any] = {}
         field_extensions = _extensions(field)

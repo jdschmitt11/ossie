@@ -30,19 +30,9 @@ import pytest
 from boring_semantic_layer import SemanticModel
 
 from ossie_bsl import convert_ossie_to_bsl, evaluate_rules
-from ossie_rules_engine import convert_evidence_to_ossie, convert_rules_to_ossie
+from ossie_rules_engine import convert_rules_to_ossie
 
-_EVIDENCE_YAML = """\
-version: '1.1'
-evidence_version: '1.0.0'
-source: gold_laterality
-dimensions:
-  - name: plan_id
-    expr: source.sk_plan
-    tags: [rules_engine:anchor, node_type:plan, evidence_version:1.0.0]
-  - name: laterality_status
-    expr: source.laterality_status
-"""
+from _util import native_model
 
 _RULES_YAML = """\
 version: '1.1'
@@ -82,12 +72,9 @@ def con():
 
 
 def _rules(con) -> SemanticModel:
-    evidence = convert_ossie_to_bsl(
-        convert_evidence_to_ossie(
-            _EVIDENCE_YAML, model_name="laterality_evidence", evidence_id="self.laterality"
-        ),
-        tables={"gold_laterality": con.table("gold_laterality")},
-    )
+    table = con.table("gold_laterality")
+    table = table.rename(plan_id="sk_plan")
+    evidence = native_model(table, entities=("plan_id",))
     predicates = convert_ossie_to_bsl(
         convert_rules_to_ossie(_RULES_YAML, model_name="dc_laterality"),
         source_model=evidence,

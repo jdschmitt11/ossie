@@ -17,16 +17,13 @@
 
 """Apache Ossie -> Boring Semantic Layer converter."""
 
-from ossie_rules_engine import convert_evidence_to_ossie, convert_rules_to_ossie
+from ossie_rules_engine import convert_rules_to_ossie
 
 from .converter import convert_ossie_to_bsl
-from .identity import with_node_identity
 from .rules import evaluate_rules
 
 __all__ = [
-    "convert_evidence_to_ossie",
     "convert_rules_to_ossie",
     "convert_ossie_to_bsl",
-    "with_node_identity",
     "evaluate_rules",
 ]

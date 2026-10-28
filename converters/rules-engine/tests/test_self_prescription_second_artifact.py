@@ -27,32 +27,15 @@ import json
 import yaml
 from ossie import OSIDocument
 
-from ossie_rules_engine import ConversionError, convert_evidence_to_ossie, convert_rules_to_ossie
+from ossie_rules_engine import convert_rules_to_ossie
 
 from _util import load_fixture
-
-
-def _evidence_ossie():
-    return convert_evidence_to_ossie(
-        load_fixture("self_prescription_evidence.metric.yaml"),
-        model_name="self_prescription_evidence",
-        evidence_id="self.prescription_evidence",
-    )
 
 
 def _rules_ossie():
     return convert_rules_to_ossie(
         load_fixture("self_prescription.rules.metric.yaml"), model_name="self_prescription"
     )
-
-
-def test_self_prescription_evidence_produces_a_schema_valid_document():
-    doc = OSIDocument.model_validate(yaml.safe_load(_evidence_ossie()))
-
-    dataset = doc.semantic_model[0].datasets[0]
-    assert dataset.source == "gold_prescription_with_sk"
-    assert dataset.primary_key == ["sk_prescription"]
-    assert len(dataset.fields) == 23
 
 
 def test_self_prescription_rules_produce_a_schema_valid_document():
@@ -100,11 +83,6 @@ def test_rule_audience_roles_is_split_into_a_list():
     assert extensions["RULES_ENGINE"]["rule_audience_roles"] == ["doctor", "physicist"]
 
 
-def test_both_artifacts_still_convert_side_by_side():
+def test_plan_rules_still_convert_alongside_prescription_rules():
     """Regression: self-plan must not regress while self-prescription is added."""
-    assert convert_evidence_to_ossie(
-        load_fixture("self_plan_evidence.metric.yaml"),
-        model_name="self_plan_evidence",
-        evidence_id="self.plan_evidence",
-    )
     assert convert_rules_to_ossie(load_fixture("self_plan.rules.metric.yaml"), model_name="self_plan")
